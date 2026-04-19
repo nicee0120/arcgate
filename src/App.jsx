@@ -344,7 +344,6 @@ export default function App() {
                 <option value="Arc_Testnet">Arc Testnet</option>
                 <option value="Base_Sepolia">Base Sepolia</option>
                 <option value="Avalanche_Fuji">Avalanche Fuji</option>
-                <option value="Polygon_Amoy">Polygon Amoy</option>
               </select>
 
               <div style={styles.arrow}>↓</div>
@@ -359,7 +358,6 @@ export default function App() {
                 <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
                 <option value="Base_Sepolia">Base Sepolia</option>
                 <option value="Avalanche_Fuji">Avalanche Fuji</option>
-                <option value="Polygon_Amoy">Polygon Amoy</option>
               </select>
 
               <div style={styles.label}>Amount (USDC)</div>
