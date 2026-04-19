@@ -280,7 +280,7 @@ export default function App() {
         account,
         transport: custom(window.ethereum),
       })
-      const adapter = createViemAdapterFromProvider(window.ethereum)
+      const adapter = await createViemAdapterFromProvider(window.ethereum)
       const kit = new AppKit()
       setStatus({ type: 'info', msg: 'Confirm transaction in your wallet...' })
       const result = await kit.bridge({
