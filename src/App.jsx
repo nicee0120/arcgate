@@ -289,7 +289,7 @@ export default function App() {
         amount: amount,
         token: 'USDC',
       })
-      setStatus({ type: 'success', msg: `Bridge successful! TX: ${result?.txHash?.slice(0,16)}...` })
+      setStatus({ type: 'success', msg: `Bridge successful! TX: ${result?.transactionHash?.slice(0,16) || result?.txHash?.slice(0,16) || 'check explorer'}...` })
     } catch (e) {
       setStatus({ type: 'error', msg: e?.message || 'Bridge failed. Try again.' })
     }
