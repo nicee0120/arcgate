@@ -247,27 +247,27 @@ export default function App() {
   }
 
   async function connectWallet() {
-    if (!window.ethereum) { alert('MetaMask veya Rabby yükleyin.'); return }
+    if (!window.ethereum) { alert('No EVM wallet found. Install MetaMask or Rabby.'); return }
     try {
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
       setAccount(accounts[0])
-    } catch { alert('Bağlantı iptal edildi.') }
+    } catch { alert('Connection cancelled.') }
   }
 
   // ── BRIDGE ──
   async function handleBridge() {
     if (!account || !amount) return
     setLoading(true)
-    setBridgeStatus({ type: 'info', msg: 'Bridge hazırlanıyor...' })
+    setBridgeStatus({ type: 'info', msg: 'Preparing bridge...' })
     try {
       const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
       const kit = new AppKit()
-      setBridgeStatus({ type: 'info', msg: 'Cüzdanınızda onaylayın...' })
+      setBridgeStatus({ type: 'info', msg: 'Confirm in your wallet...' })
       const result = await kit.bridge({ from: { adapter, chain: fromChain }, to: { adapter, chain: toChain }, amount, token: 'USDC' })
       const hash = result?.transactionHash || result?.txHash || ''
-      setBridgeStatus({ type: 'success', msg: `✅ Bridge başarılı!\nTX: ${hash.slice(0, 20)}...` })
+      setBridgeStatus({ type: 'success', msg: `✅ Bridge successful!\nTX: ${hash.slice(0, 20)}...` })
     } catch (e) {
-      setBridgeStatus({ type: 'error', msg: e?.message || 'Bridge başarısız.' })
+      setBridgeStatus({ type: 'error', msg: e?.message || 'Bridge failed.' })
     }
     setLoading(false)
   }
@@ -276,7 +276,7 @@ export default function App() {
   async function handleSwap() {
     if (!account || !swapAmount) return
     setLoading(true)
-    setSwapStatus({ type: 'info', msg: 'Swap hazırlanıyor...' })
+    setSwapStatus({ type: 'info', msg: 'Preparing swap...' })
     try {
       const chain = getChainConfig(swapNetwork)
       const tokens = TOKENS[swapNetwork]
@@ -290,7 +290,7 @@ export default function App() {
 
       const parsedAmount = parseUnits(swapAmount, fromToken.decimals)
 
-      setSwapStatus({ type: 'info', msg: `${fromToken.symbol} → ${toToken.symbol} onayı alınıyor...` })
+      setSwapStatus({ type: 'info', msg: `${fromToken.symbol} → ${toToken.symbol} approval in progress...` })
 
       // Approve tx (spender olarak toToken adresi — gerçek DEX'te router adresi olacak)
       const approveTx = await walletClient.writeContract({
@@ -303,10 +303,10 @@ export default function App() {
 
       setSwapStatus({
         type: 'success',
-        msg: `✅ Swap onayı tamamlandı!\n${swapAmount} ${fromToken.symbol} → ${toToken.symbol}\nTX: ${approveTx.slice(0, 20)}...\n\nNot: Gerçek swap için DEX router entegrasyonu gereklidir.`,
+        msg: `✅ Swap approval complete!\n${swapAmount} ${fromToken.symbol} → ${toToken.symbol}\nTX: ${approveTx.slice(0, 20)}...\n\nNote: A DEX router integration is required for real swaps.`,
       })
     } catch (e) {
-      setSwapStatus({ type: 'error', msg: e?.shortMessage || e?.message || 'Swap başarısız.' })
+      setSwapStatus({ type: 'error', msg: e?.shortMessage || e?.message || 'Swap failed.' })
     }
     setLoading(false)
   }
@@ -315,7 +315,7 @@ export default function App() {
   async function handleDeploy() {
     if (!account) return
     setLoading(true)
-    setDeployStatus({ type: 'info', msg: 'HelloArc kontratı deploy ediliyor...' })
+    setDeployStatus({ type: 'info', msg: 'Deploying HelloArc contract...' })
     try {
       const chain = getChainConfig(deployNetwork)
       await switchNetwork(chain)
@@ -323,7 +323,7 @@ export default function App() {
       const walletClient = createWalletClient({ account, chain, transport: custom(window.ethereum) })
       const publicClient = createPublicClient({ chain, transport: http(chain.rpcUrls.default.http[0]) })
 
-      setDeployStatus({ type: 'info', msg: 'Cüzdanınızda onaylayın...' })
+      setDeployStatus({ type: 'info', msg: 'Confirm in your wallet...' })
 
       const hash = await walletClient.deployContract({
         abi: DEMO_ABI,
@@ -331,16 +331,16 @@ export default function App() {
         args: [],
       })
 
-      setDeployStatus({ type: 'info', msg: 'TX gönderildi, receipt bekleniyor...' })
+      setDeployStatus({ type: 'info', msg: 'TX submitted, waiting for receipt...' })
       const receipt = await publicClient.waitForTransactionReceipt({ hash })
       const explorerBase = getExplorerUrl(deployNetwork)
 
       setDeployStatus({
         type: 'success',
-        msg: `✅ HelloArc kontratı deploy edildi!\n\nAdres: ${receipt.contractAddress}\nTX: ${hash.slice(0, 20)}...\n\nExplorer:\n${explorerBase}/address/${receipt.contractAddress}`,
+        msg: `✅ HelloArc contract deployed!\n\nAddress: ${receipt.contractAddress}\nTX: ${hash.slice(0, 20)}...\n\nExplorer:\n${explorerBase}/address/${receipt.contractAddress}`,
       })
     } catch (e) {
-      setDeployStatus({ type: 'error', msg: e?.shortMessage || e?.message || 'Deploy başarısız.' })
+      setDeployStatus({ type: 'error', msg: e?.shortMessage || e?.message || 'Deploy failed.' })
     }
     setLoading(false)
   }
@@ -349,23 +349,44 @@ export default function App() {
   async function handleLookup() {
     if (!lookupAddress.trim()) return
     setLoading(true)
-    setLookupStatus({ type: 'info', msg: 'Sorgulanıyor...' })
+    setLookupStatus({ type: 'info', msg: 'Looking up...' })
     setLookupResult(null)
     try {
       const chain = getChainConfig(lookupNetwork)
       const publicClient = createPublicClient({ chain, transport: http(chain.rpcUrls.default.http[0]) })
       const addr = lookupAddress.trim()
+      const tokens = TOKENS[lookupNetwork]
 
-      const [balance, txCount, code] = await Promise.all([
+      const [nativeBalance, txCount, code, ...tokenBalances] = await Promise.all([
         publicClient.getBalance({ address: addr }),
         publicClient.getTransactionCount({ address: addr }),
         publicClient.getBytecode({ address: addr }),
+        ...tokens.map(t =>
+          publicClient.readContract({ address: t.address, abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] })
+            .catch(() => 0n)
+        ),
       ])
 
       const isContract = code && code !== '0x' && code.length > 2
+
+      // Arc'ta native balance aslında USDC (18 decimals), label buna göre
+      const isArc = lookupNetwork === 'arc'
+      const nativeLabel = isArc ? 'USDC (native)' : 'ETH'
+      const nativeFormatted = isArc
+        ? parseFloat(formatEther(nativeBalance)).toFixed(4)
+        : parseFloat(formatEther(nativeBalance)).toFixed(6)
+
+      // ERC-20 token bakiyeleri
+      const tokenResults = tokens.map((t, i) => ({
+        symbol: t.symbol,
+        balance: (Number(tokenBalances[i]) / 10 ** t.decimals).toFixed(4),
+      }))
+
       setLookupResult({
         address: addr,
-        balance: formatEther(balance),
+        nativeBalance: nativeFormatted,
+        nativeLabel,
+        tokenBalances: tokenResults,
         txCount: txCount.toString(),
         type: isContract ? 'Contract' : 'EOA (Wallet)',
         bytecodeSize: isContract ? `${((code.length - 2) / 2)} bytes` : '-',
@@ -374,7 +395,7 @@ export default function App() {
       })
       setLookupStatus(null)
     } catch (e) {
-      setLookupStatus({ type: 'error', msg: e?.message || 'Adres sorgulanamadı.' })
+      setLookupStatus({ type: 'error', msg: e?.message || 'Invalid address or network error.' })
     }
     setLoading(false)
   }
@@ -398,7 +419,7 @@ export default function App() {
 
       <div style={styles.hero}>
         <h1 style={styles.heroTitle}>ArcGate</h1>
-        <p style={styles.heroSub}>Bridge, swap, deploy ve adres sorgulama — Arc Testnet için tam araç seti.</p>
+        <p style={styles.heroSub}>Bridge, swap, deploy and address lookup — the complete toolkit for Arc Testnet.</p>
       </div>
 
       <div style={styles.tabs}>
@@ -414,7 +435,7 @@ export default function App() {
           {tab === 'bridge' && (
             <>
               <div style={styles.cardTitle}>Bridge USDC</div>
-              <div style={styles.cardSub}>CCTP ile zincirler arası USDC transferi</div>
+              <div style={styles.cardSub}>Transfer USDC across chains via CCTP</div>
               <div style={styles.label}>From</div>
               <select style={styles.select} value={fromChain} onChange={e => setFromChain(e.target.value)}>
                 <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
@@ -435,9 +456,9 @@ export default function App() {
               <div style={styles.divider} />
               <div style={styles.infoRow}><span>Token</span><span style={styles.infoVal}>USDC</span></div>
               <div style={styles.infoRow}><span>Protocol</span><span style={styles.infoVal}>CCTP</span></div>
-              <div style={styles.infoRow}><span>Tahmini süre</span><span style={styles.infoVal}>~20 saniye</span></div>
+              <div style={styles.infoRow}><span>Estimated time</span><span style={styles.infoVal}>~20 seconds</span></div>
               <button style={styles.btn(!account || !amount || loading)} onClick={handleBridge} disabled={!account || !amount || loading}>
-                {loading ? 'Bridging...' : account ? 'Bridge USDC' : 'Önce cüzdan bağla'}
+                {loading ? 'Bridging...' : account ? 'Bridge USDC' : 'Connect wallet first'}
               </button>
               {bridgeStatus && <div style={styles.statusBox(bridgeStatus.type)}>{bridgeStatus.msg}</div>}
             </>
@@ -451,7 +472,7 @@ export default function App() {
             return (
               <>
                 <div style={styles.cardTitle}>Token Swap</div>
-                <div style={styles.cardSub}>USDC ↔ EURC arası swap</div>
+                <div style={styles.cardSub}>Swap between USDC and EURC</div>
 
                 <div style={styles.label}>Network</div>
                 <select style={styles.select} value={swapNetwork} onChange={e => { setSwapNetwork(e.target.value); setSwapFromIdx(0); setSwapToIdx(1) }}>
@@ -481,16 +502,16 @@ export default function App() {
                   ))}
                 </div>
 
-                <div style={styles.label}>Miktar ({fromToken.symbol})</div>
+                <div style={styles.label}>Amount ({fromToken.symbol})</div>
                 <input style={styles.input} type="number" placeholder="0.00" value={swapAmount} onChange={e => setSwapAmount(e.target.value)} />
 
                 <div style={styles.divider} />
-                <div style={styles.infoRow}><span>Çift</span><span style={styles.infoVal}>{fromToken.symbol} → {toToken.symbol}</span></div>
+                <div style={styles.infoRow}><span>Pair</span><span style={styles.infoVal}>{fromToken.symbol} → {toToken.symbol}</span></div>
                 <div style={styles.infoRow}><span>Slippage</span><span style={styles.infoVal}>0.5%</span></div>
                 <div style={styles.infoRow}><span>From adres</span><span style={styles.infoVal}>{fromToken.address.slice(0, 10)}...</span></div>
 
                 <button style={styles.btn(!account || !swapAmount || loading)} onClick={handleSwap} disabled={!account || !swapAmount || loading}>
-                  {loading ? 'İşleniyor...' : account ? `${fromToken.symbol} → ${toToken.symbol} Swap` : 'Önce cüzdan bağla'}
+                  {loading ? 'Processing...' : account ? `${fromToken.symbol} → ${toToken.symbol} Swap` : 'Connect wallet first'}
                 </button>
                 {swapStatus && <div style={styles.statusBox(swapStatus.type)}>{swapStatus.msg}</div>}
               </>
@@ -501,7 +522,7 @@ export default function App() {
           {tab === 'deploy' && (
             <>
               <div style={styles.cardTitle}>Contract Deploy</div>
-              <div style={styles.cardSub}>Hazır HelloArc kontratını tek tıkla deploy et</div>
+              <div style={styles.cardSub}>Deploy the HelloArc contract in one click</div>
 
               <div style={styles.infoCard}>
                 <div style={{ fontSize: '13px', color: 'rgba(196,158,71,0.9)', fontWeight: '600', marginBottom: '8px' }}>📄 HelloArc.sol</div>
@@ -526,7 +547,7 @@ export default function App() {
               <div style={styles.infoRow}><span>Network</span><span style={styles.infoVal}>{deployNetwork === 'arc' ? 'Arc Testnet' : 'Sepolia'}</span></div>
 
               <button style={styles.btn(!account || loading)} onClick={handleDeploy} disabled={!account || loading}>
-                {loading ? 'Deploy ediliyor...' : account ? '🚀 Deploy Et' : 'Önce cüzdan bağla'}
+                {loading ? 'Deploying...' : account ? '🚀 Deploy' : 'Connect wallet first'}
               </button>
               {deployStatus && <div style={styles.statusBox(deployStatus.type)}>{deployStatus.msg}</div>}
             </>
@@ -536,35 +557,41 @@ export default function App() {
           {tab === 'lookup' && (
             <>
               <div style={styles.cardTitle}>Address Lookup</div>
-              <div style={styles.cardSub}>Cüzdan veya kontrat adresini sorgula</div>
+              <div style={styles.cardSub}>Look up any wallet or contract address</div>
               <div style={styles.label}>Network</div>
               <select style={styles.select} value={lookupNetwork} onChange={e => { setLookupNetwork(e.target.value); setLookupResult(null) }}>
                 <option value="arc">Arc Testnet</option>
                 <option value="sepolia">Ethereum Sepolia</option>
               </select>
-              <div style={styles.label}>Adres</div>
+              <div style={styles.label}>Address</div>
               <input style={styles.input} placeholder="0x..." value={lookupAddress} onChange={e => setLookupAddress(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleLookup()} />
               <button style={styles.btn(!lookupAddress.trim() || loading)} onClick={handleLookup} disabled={!lookupAddress.trim() || loading}>
-                {loading ? 'Sorgulanıyor...' : 'Sorgula'}
+                {loading ? 'Looking up...' : 'Look Up'}
               </button>
               {lookupStatus && <div style={styles.statusBox(lookupStatus.type)}>{lookupStatus.msg}</div>}
               {lookupResult && (
                 <div style={styles.resultBox}>
                   <div style={styles.resultRow}>
-                    <span style={styles.resultLabel}>Adres</span>
+                    <span style={styles.resultLabel}>Address</span>
                     <span style={styles.resultVal}>{lookupResult.address.slice(0, 10)}...{lookupResult.address.slice(-8)}</span>
                   </div>
                   <div style={styles.resultRow}>
-                    <span style={styles.resultLabel}>Tür</span>
+                    <span style={styles.resultLabel}>Type</span>
                     <span style={styles.resultVal}>{lookupResult.type}</span>
                   </div>
                   <div style={styles.resultRow}>
-                    <span style={styles.resultLabel}>Bakiye</span>
-                    <span style={styles.resultVal}>{parseFloat(lookupResult.balance).toFixed(6)} ETH</span>
+                    <span style={styles.resultLabel}>{lookupResult.nativeLabel}</span>
+                    <span style={styles.resultVal}>{lookupResult.nativeBalance}</span>
                   </div>
+                  {lookupResult.tokenBalances.map(t => (
+                    <div key={t.symbol} style={styles.resultRow}>
+                      <span style={styles.resultLabel}>{t.symbol}</span>
+                      <span style={styles.resultVal}>{t.balance}</span>
+                    </div>
+                  ))}
                   <div style={styles.resultRow}>
-                    <span style={styles.resultLabel}>TX Sayısı</span>
+                    <span style={styles.resultLabel}>TX Count</span>
                     <span style={styles.resultVal}>{lookupResult.txCount}</span>
                   </div>
                   {lookupResult.type === 'Contract' && (
@@ -579,7 +606,7 @@ export default function App() {
                   </div>
                   <a href={lookupResult.explorerUrl} target="_blank" rel="noreferrer"
                     style={{ ...styles.faucetBtn, marginTop: '12px', fontSize: '13px', padding: '10px 16px' }}>
-                    Explorer'da Görüntüle ↗
+                    View on Explorer ↗
                   </a>
                 </div>
               )}
@@ -590,7 +617,7 @@ export default function App() {
           {tab === 'faucet' && (
             <>
               <div style={styles.cardTitle}>Testnet Faucet</div>
-              <div style={styles.cardSub}>Arc Testnet için ücretsiz USDC ve EURC al</div>
+              <div style={styles.cardSub}>Get free USDC and EURC on Arc Testnet</div>
               <div style={styles.divider} />
               <div style={styles.infoRow}><span>Network</span><span style={styles.infoVal}>Arc Testnet</span></div>
               <div style={styles.infoRow}><span>USDC</span><span style={styles.infoVal}>0x3600...0000</span></div>
@@ -604,10 +631,10 @@ export default function App() {
               </div>
               <div style={styles.divider} />
               <p style={{ fontSize: '13px', color: 'rgba(232,224,204,0.5)', lineHeight: '1.6', marginBottom: '1rem' }}>
-                Circle Faucet'ten USDC ve EURC alabilirsiniz. Arc Testnet'i seçip token isteyin.
+                Visit the Circle Faucet to receive free testnet USDC and EURC. Select Arc Testnet and request your tokens.
               </p>
-              <a href="https://faucet.circle.com" target="_blank" rel="noreferrer" style={styles.faucetBtn}>Circle Faucet'i Aç ↗</a>
-              <a href="https://testnet.arcscan.app" target="_blank" rel="noreferrer" style={{ ...styles.faucetBtn, marginTop: '8px' }}>ArcScan'de Görüntüle ↗</a>
+              <a href="https://faucet.circle.com" target="_blank" rel="noreferrer" style={styles.faucetBtn}>Open Circle Faucet ↗</a>
+              <a href="https://testnet.arcscan.app" target="_blank" rel="noreferrer" style={{ ...styles.faucetBtn, marginTop: '8px' }}>View on ArcScan ↗</a>
             </>
           )}
 
