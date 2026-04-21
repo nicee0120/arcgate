@@ -226,6 +226,9 @@ export default function App() {
   const getExplorerUrl = (net) => net === 'arc' ? 'https://testnet.arcscan.app' : 'https://sepolia.etherscan.io'
 
   async function switchNetwork(chain) {
+    const currentChainId = await window.ethereum.request({ method: 'eth_chainId' })
+    if (currentChainId === `0x${chain.id.toString(16)}`) return // already on correct network
+
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
@@ -233,22 +236,32 @@ export default function App() {
       })
     } catch (e) {
       if (e.code === 4902) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: `0x${chain.id.toString(16)}`,
-              chainName: chain.name,
-              rpcUrls: chain.rpcUrls.default.http,
-              nativeCurrency: chain.nativeCurrency,
-              blockExplorerUrls: [chain.blockExplorers.default.url],
-            }],
-          })
-        } catch {
-          // Network already exists with different RPC — ignore, proceed anyway
-        }
+        // Network not added yet — add it
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: `0x${chain.id.toString(16)}`,
+            chainName: chain.name,
+            rpcUrls: chain.rpcUrls.default.http,
+            nativeCurrency: chain.nativeCurrency,
+            blockExplorerUrls: [chain.blockExplorers.default.url],
+          }],
+        })
+      } else if (e.code === -32602 || e.message?.includes('same RPC')) {
+        // RPC conflict — network already exists, just switch
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: `0x${chain.id.toString(16)}` }],
+        })
+      } else {
+        throw new Error(`Please switch your wallet to ${chain.name} and try again.`)
       }
-      // For any other error (e.g. RPC conflict), ignore and proceed
+    }
+
+    // Verify switch was successful
+    const newChainId = await window.ethereum.request({ method: 'eth_chainId' })
+    if (newChainId !== `0x${chain.id.toString(16)}`) {
+      throw new Error(`Please switch your wallet to ${chain.name} and try again.`)
     }
   }
 
