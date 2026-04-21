@@ -4,7 +4,7 @@ import { AppKit } from '@circle-fin/app-kit'
 import { createViemAdapterFromProvider } from '@circle-fin/adapter-viem-v2'
 
 const ARC_TESTNET = {
-  id: 1313161555,
+  id: 5042002,
   name: 'Arc Testnet',
   nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
   rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] } },
@@ -739,7 +739,7 @@ https://testnet.arcscan.app/tx/${hash}`,
                 ['Execution', 'EVM'],
                 ['Gas Token', 'USDC'],
                 ['Finality', 'Deterministic, &lt;1s'],
-                ['Chain ID', '1313161555'],
+                ['Chain ID', '5042002'],
                 ['RPC', 'rpc.testnet.arc.network'],
               ].map(([k, v]) => (
                 <div key={k} style={styles.infoRow}>
