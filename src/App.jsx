@@ -39,10 +39,9 @@ const ERC20_ABI = [
   { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
 ]
 
-// Basit "Hello Arc" kontratı — constructor'da string saklayan minimal bytecode
-// pragma solidity ^0.8.0;
-// contract HelloArc { string public greeting = "Hello, Arc!"; }
-const DEMO_BYTECODE = '0x608060405234801561001057600080fd5b506040518060400160405280600b81526020017f48656c6c6f2c2041726321000000000000000000000000000000000000000000815250600090816100559190610108565b506101d7565b600081519050919050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052604160045260246000fd5b7f4e487b7100000000000000000000000000000000000000000000000000000000600052602260045260246000fd5b600060028204905060018216806100d757607f821691505b6020821081036100ea576100e9610090565b5b50919050565b6000819050815f5260205f209050919050565b5f6020601f8301049050919050565b5f82821b905092915050565b5f600883026101527fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff82610115565b61015c8683610115565b95508019841693508086168417925050509392505050565b5f819050919050565b5f819050919050565b5f61019e61019961019484610174565b61017d565b610174565b9050919050565b5f819050919050565b6101b783610186565b6101cb6101c3826101a5565b8484546101a5565b825550505050565b5f90565b5f6101e26101d3565b90506101ee8184846101ae565b505050565b5b81811015610211576102065f826101d3565b6001810190506101f4565b5050565b601f8211156102565761022781610100565b61023084610103565b8101602085101561023f578190505b61025361024b85610103565b8301826101f3565b50505b505050565b5f82821c905092915050565b5f6102765f198460080261025b565b1980831691505092915050565b5f61028e8383610267565b9150826002028217905092915050565b6102a78261005b565b67ffffffffffffffff8111156102c0576102bf610065565b5b6102ca82546100bf565b6102d5828285610215565b5f60209050601f8311600181146103065f84156102f4578287015190505b6102fe8582610283565b865550610365565b601f19841661031486610100565b5f5b8281101561033b57848901518255600182019150602085019450602081019050610316565b868310156103585784890151610354601f891682610267565b8355505b6001600288020188555050505b505050505050565b603f806103835f395ff3fe6080604052600080fdfea264697066735822122'
+// SimpleStorage: stores a uint256, compiled with solc 0.8.20
+// contract SimpleStorage { uint256 public value = 42; }
+const DEMO_BYTECODE = '0x6080604052602a60005534801561001557600080fd5b5060b3806100246000396000f3fe6080604052348015600e57600080fd5b50600436106026575f3560e01c80633fa4f24514602a575b5f5ffd5b60306044565b604051603b91906062565b60405180910390f35b5f5481565b5f819050919050565b605c81604a565b82525050565b5f602082019050607360008301846055565b9291505056fea264697066735822122'
 
 const DEMO_ABI = [
   { inputs: [], stateMutability: 'nonpayable', type: 'constructor' },
@@ -204,17 +203,7 @@ export default function App() {
   const [fromChain, setFromChain] = useState('Ethereum_Sepolia')
   const [toChain, setToChain] = useState('Arc_Testnet')
 
-  // Swap
-  const [swapFromIdx, setSwapFromIdx] = useState(0) // USDC
-  const [swapToIdx, setSwapToIdx] = useState(1)     // EURC
-  const [swapAmount, setSwapAmount] = useState('')
-  const [swapNetwork, setSwapNetwork] = useState('arc')
-  const [swapStatus, setSwapStatus] = useState(null)
-  const [swapBalances, setSwapBalances] = useState({})
 
-  // Deploy
-  const [deployNetwork, setDeployNetwork] = useState('arc')
-  const [deployStatus, setDeployStatus] = useState(null)
 
   // Lookup
   const [lookupAddress, setLookupAddress] = useState('')
@@ -275,105 +264,6 @@ export default function App() {
 
   // ── SWAP ──
 
-  async function fetchSwapBalances(network, addr) {
-    if (!addr) return
-    try {
-      const chain = getChainConfig(network)
-      const tokens = TOKENS[network]
-      const publicClient = createPublicClient({ chain, transport: http(chain.rpcUrls.default.http[0]) })
-      const bals = await Promise.all(
-        tokens.map(t => publicClient.readContract({ address: t.address, abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }).catch(() => 0n))
-      )
-      const result = {}
-      tokens.forEach((t, i) => { result[t.symbol] = (Number(bals[i]) / 10 ** t.decimals).toFixed(4) })
-      setSwapBalances(result)
-    } catch {}
-  }
-
-  async function handleSwap() {
-    if (!account || !swapAmount) return
-    setLoading(true)
-    setSwapStatus({ type: 'info', msg: 'Preparing swap...' })
-    try {
-      const tokens = TOKENS[swapNetwork]
-      const fromToken = tokens[swapFromIdx]
-      const toToken = tokens[swapToIdx]
-
-      // Arc Testnet: use kit.swap() — only testnet that supports swap
-      if (swapNetwork === 'arc') {
-        await switchNetwork(ARC_TESTNET)
-
-        const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
-        const kit = new AppKit()
-
-        setSwapStatus({ type: 'info', msg: `Swapping ${swapAmount} ${fromToken.symbol} → ${toToken.symbol}...` })
-
-        const result = await kit.swap({
-          from: { adapter, chain: 'Arc_Testnet' },
-          tokenIn: fromToken.symbol,
-          tokenOut: toToken.symbol,
-          amountIn: swapAmount,
-          config: {
-            kitKey: import.meta.env.VITE_KIT_KEY,
-          },
-        })
-
-        const hash = result?.txHash || result?.transactionHash || ''
-        setSwapStatus({
-          type: 'success',
-          msg: `✅ Swap complete!
-${swapAmount} ${fromToken.symbol} → ${result?.amountOut || '?'} ${toToken.symbol}
-TX: ${hash.slice(0, 20)}...
-https://testnet.arcscan.app/tx/${hash}`,
-        })
-        fetchSwapBalances(swapNetwork, account)
-      } else {
-        // Sepolia: kit.swap() not supported, show message
-        setSwapStatus({
-          type: 'error',
-          msg: 'Swap is only available on Arc Testnet. Please switch network to Arc Testnet.',
-        })
-      }
-    } catch (e) {
-      setSwapStatus({ type: 'error', msg: e?.shortMessage || e?.message || 'Swap failed.' })
-    }
-    setLoading(false)
-  }
-
-  // ── DEPLOY ──
-  async function handleDeploy() {
-    if (!account) return
-    setLoading(true)
-    setDeployStatus({ type: 'info', msg: 'Deploying HelloArc contract...' })
-    try {
-      const chain = getChainConfig(deployNetwork)
-      await switchNetwork(chain)
-
-      const walletClient = createWalletClient({ account, chain, transport: custom(window.ethereum) })
-      const publicClient = createPublicClient({ chain, transport: http(chain.rpcUrls.default.http[0]) })
-
-      setDeployStatus({ type: 'info', msg: 'Confirm in your wallet...' })
-
-      const hash = await walletClient.deployContract({
-        abi: DEMO_ABI,
-        bytecode: DEMO_BYTECODE,
-        args: [],
-      })
-
-      setDeployStatus({ type: 'info', msg: 'TX submitted, waiting for receipt...' })
-      const receipt = await publicClient.waitForTransactionReceipt({ hash })
-      const explorerBase = getExplorerUrl(deployNetwork)
-
-      setDeployStatus({
-        type: 'success',
-        msg: `✅ HelloArc contract deployed!\n\nAddress: ${receipt.contractAddress}\nTX: ${hash.slice(0, 20)}...\n\nExplorer:\n${explorerBase}/address/${receipt.contractAddress}`,
-      })
-    } catch (e) {
-      setDeployStatus({ type: 'error', msg: e?.shortMessage || e?.message || 'Deploy failed.' })
-    }
-    setLoading(false)
-  }
-
   // ── LOOKUP ──
   async function handleLookup() {
     if (!lookupAddress.trim()) return
@@ -429,9 +319,7 @@ https://testnet.arcscan.app/tx/${hash}`,
     setLoading(false)
   }
 
-  useEffect(() => { if (tab === 'swap' && account) fetchSwapBalances(swapNetwork, account) }, [tab, account, swapNetwork])
-
-  const TAB_LABELS = { bridge: 'Bridge', swap: 'Swap', deploy: 'Deploy', lookup: 'Address Lookup', faucet: 'Faucet', about: 'What is Arc?' }
+  const TAB_LABELS = { bridge: 'Bridge', lookup: 'Address Lookup', faucet: 'Faucet', about: 'What is Arc?' }
 
   return (
     <div style={styles.app}>
@@ -450,7 +338,7 @@ https://testnet.arcscan.app/tx/${hash}`,
 
       <div style={styles.hero}>
         <h1 style={styles.heroTitle}>ArcGate</h1>
-        <p style={styles.heroSub}>Bridge, swap, deploy and address lookup — the complete toolkit for Arc Testnet.</p>
+        <p style={styles.heroSub}>Bridge, address lookup and more — the complete toolkit for Arc Testnet.</p>
       </div>
 
       <div style={styles.tabs}>
@@ -495,101 +383,7 @@ https://testnet.arcscan.app/tx/${hash}`,
             </>
           )}
 
-          {/* SWAP */}
-          {tab === 'swap' && (() => {
-            const tokens = TOKENS[swapNetwork]
-            const fromToken = tokens[swapFromIdx]
-            const toToken = tokens[swapToIdx]
-            return (
-              <>
-                <div style={styles.cardTitle}>Token Swap</div>
-                <div style={styles.cardSub}>Swap between USDC and EURC</div>
-
-                <div style={styles.label}>Network</div>
-                <select style={styles.select} value={swapNetwork} onChange={e => { setSwapNetwork(e.target.value); setSwapFromIdx(0); setSwapToIdx(1); setSwapBalances({}); fetchSwapBalances(e.target.value, account) }}>
-                  <option value="arc">Arc Testnet</option>
-                  <option value="sepolia">Ethereum Sepolia</option>
-                </select>
-
-                <div style={styles.label}>From</div>
-                <div style={styles.tokenRow}>
-                  {tokens.map((t, i) => (
-                    <button key={t.symbol} style={styles.tokenBtn(swapFromIdx === i)}
-                      onClick={() => { setSwapFromIdx(i); if (swapToIdx === i) setSwapToIdx(i === 0 ? 1 : 0); fetchSwapBalances(swapNetwork, account) }}>
-                      <div>{t.symbol}</div>
-                      {swapBalances[t.symbol] !== undefined && (
-                        <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '2px' }}>{swapBalances[t.symbol]}</div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-
-                <div style={styles.arrow}>⇅</div>
-
-                <div style={styles.label}>To</div>
-                <div style={styles.tokenRow}>
-                  {tokens.map((t, i) => (
-                    <button key={t.symbol} style={styles.tokenBtn(swapToIdx === i)}
-                      onClick={() => { setSwapToIdx(i); if (swapFromIdx === i) setSwapFromIdx(i === 0 ? 1 : 0) }}>
-                      <div>{t.symbol}</div>
-                      {swapBalances[t.symbol] !== undefined && (
-                        <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '2px' }}>{swapBalances[t.symbol]}</div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-
-                <div style={styles.label}>Amount ({fromToken.symbol})</div>
-                <input style={styles.input} type="number" placeholder="0.00" value={swapAmount} onChange={e => setSwapAmount(e.target.value)} />
-
-                <div style={styles.divider} />
-                <div style={styles.infoRow}><span>Pair</span><span style={styles.infoVal}>{fromToken.symbol} → {toToken.symbol}</span></div>
-                <div style={styles.infoRow}><span>Slippage</span><span style={styles.infoVal}>0.5%</span></div>
-                <div style={styles.infoRow}><span>From address</span><span style={styles.infoVal}>{fromToken.address.slice(0, 10)}...</span></div>
-
-                <button style={styles.btn(!account || !swapAmount || loading)} onClick={handleSwap} disabled={!account || !swapAmount || loading}>
-                  {loading ? 'Processing...' : account ? `${fromToken.symbol} → ${toToken.symbol} Swap` : 'Connect wallet first'}
-                </button>
-                {swapStatus && <div style={styles.statusBox(swapStatus.type)}>{swapStatus.msg}</div>}
-              </>
-            )
-          })()}
-
           {/* DEPLOY */}
-          {tab === 'deploy' && (
-            <>
-              <div style={styles.cardTitle}>Contract Deploy</div>
-              <div style={styles.cardSub}>Deploy the HelloArc contract in one click</div>
-
-              <div style={styles.infoCard}>
-                <div style={{ fontSize: '13px', color: 'rgba(196,158,71,0.9)', fontWeight: '600', marginBottom: '8px' }}>📄 HelloArc.sol</div>
-                <div style={{ fontSize: '12px', color: 'rgba(232,224,204,0.6)', fontFamily: 'monospace', lineHeight: '1.7' }}>
-                  pragma solidity ^0.8.0;<br/>
-                  contract HelloArc {'{'}<br/>
-                  &nbsp;&nbsp;string public greeting<br/>
-                  &nbsp;&nbsp;&nbsp;&nbsp;= "Hello, Arc!";<br/>
-                  {'}'}
-                </div>
-              </div>
-
-              <div style={styles.label}>Network</div>
-              <select style={styles.select} value={deployNetwork} onChange={e => { setDeployNetwork(e.target.value); setDeployStatus(null) }}>
-                <option value="arc">Arc Testnet</option>
-                <option value="sepolia">Ethereum Sepolia</option>
-              </select>
-
-              <div style={styles.divider} />
-              <div style={styles.infoRow}><span>Contract</span><span style={styles.infoVal}>HelloArc</span></div>
-              <div style={styles.infoRow}><span>Gas</span><span style={styles.infoVal}>Auto</span></div>
-              <div style={styles.infoRow}><span>Network</span><span style={styles.infoVal}>{deployNetwork === 'arc' ? 'Arc Testnet' : 'Sepolia'}</span></div>
-
-              <button style={styles.btn(!account || loading)} onClick={handleDeploy} disabled={!account || loading}>
-                {loading ? 'Deploying...' : account ? '🚀 Deploy' : 'Connect wallet first'}
-              </button>
-              {deployStatus && <div style={styles.statusBox(deployStatus.type)}>{deployStatus.msg}</div>}
-            </>
-          )}
-
           {/* ADDRESS LOOKUP */}
           {tab === 'lookup' && (
             <>
@@ -764,3 +558,4 @@ https://testnet.arcscan.app/tx/${hash}`,
     </div>
   )
 }
+
