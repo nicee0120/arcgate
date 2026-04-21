@@ -230,37 +230,20 @@ export default function App() {
     const currentChainId = await window.ethereum.request({ method: 'eth_chainId' })
     if (currentChainId === targetChainId) return
 
-    // Try switch first — works if network already exists in wallet
+    // Just request a switch — MetaMask handles the rest
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: targetChainId }],
       })
-    } catch (switchErr) {
-      if (switchErr.code === 4902) {
-        // Not in wallet yet — add it (ignore RPC conflict errors silently)
-        try {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: targetChainId,
-              chainName: chain.name,
-              rpcUrls: chain.rpcUrls.default.http,
-              nativeCurrency: chain.nativeCurrency,
-              blockExplorerUrls: [chain.blockExplorers.default.url],
-            }],
-          })
-        } catch {
-          // RPC conflict or already exists — ignore, wallet likely switched anyway
-        }
-      }
-      // For all other errors: ignore, verify below
+    } catch (e) {
+      // Ignore all errors — user may have already switched manually
     }
 
-    // Final check — if still on wrong network, user must switch manually
+    // Final check
     const finalChainId = await window.ethereum.request({ method: 'eth_chainId' })
     if (finalChainId !== targetChainId) {
-      throw new Error(`Wrong network. Please switch to ${chain.name} (Chain ID: ${chain.id}) in your wallet.`)
+      throw new Error(`Please switch to ${chain.name} in your wallet and try again.`)
     }
   }
 
