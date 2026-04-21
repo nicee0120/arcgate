@@ -379,7 +379,7 @@ export default function App() {
     setLoading(false)
   }
 
-  const TAB_LABELS = { bridge: 'Bridge', swap: 'Swap', deploy: 'Deploy', lookup: 'Address Lookup', faucet: 'Faucet' }
+  const TAB_LABELS = { bridge: 'Bridge', swap: 'Swap', deploy: 'Deploy', lookup: 'Address Lookup', faucet: 'Faucet', about: 'What is Arc?' }
 
   return (
     <div style={styles.app}>
@@ -608,6 +608,90 @@ export default function App() {
               </p>
               <a href="https://faucet.circle.com" target="_blank" rel="noreferrer" style={styles.faucetBtn}>Circle Faucet'i Aç ↗</a>
               <a href="https://testnet.arcscan.app" target="_blank" rel="noreferrer" style={{ ...styles.faucetBtn, marginTop: '8px' }}>ArcScan'de Görüntüle ↗</a>
+            </>
+          )}
+
+          {/* ABOUT */}
+          {tab === 'about' && (
+            <>
+              <div style={styles.cardTitle}>What is Arc?</div>
+              <div style={styles.cardSub}>A stablecoin-native L1 blockchain built by Circle</div>
+
+              <div style={styles.divider} />
+
+              <p style={{ fontSize: '14px', color: 'rgba(232,224,204,0.75)', lineHeight: '1.8', marginBottom: '1.5rem' }}>
+                Arc is an EVM-compatible Layer-1 blockchain purpose-built for onchain finance.
+                It combines predictable fees, deterministic finality, and opt-in privacy
+                to support payments, lending, and FX at scale.
+              </p>
+
+              {/* Feature Cards */}
+              {[
+                {
+                  icon: '💵',
+                  title: 'USDC Native Gas Token',
+                  desc: 'Transaction fees are denominated in USDC — no need to hold a volatile token. Target fee is ~$0.01 per transaction.',
+                },
+                {
+                  icon: '⚡',
+                  title: 'Sub-Second Finality',
+                  desc: 'Transactions finalize in under one second with no risk of chain reorganization. Powered by Malachite BFT consensus.',
+                },
+                {
+                  icon: '🔒',
+                  title: 'Opt-in Privacy',
+                  desc: 'Confidential transfers and selective disclosure for regulated use cases, available on demand.',
+                },
+                {
+                  icon: '🔧',
+                  title: 'EVM Compatible',
+                  desc: 'Deploy existing Solidity contracts and use standard Ethereum tooling like Hardhat, Foundry, and Viem without modification.',
+                },
+                {
+                  icon: '🌍',
+                  title: 'EURC Support',
+                  desc: 'EURC is natively supported on Arc for euro-denominated transfers. Both USDC and EURC are available on the Circle Faucet.',
+                },
+              ].map(f => (
+                <div key={f.title} style={{ ...styles.infoCard, marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: '20px', marginTop: '2px' }}>{f.icon}</span>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: '600', color: '#e8c97a', marginBottom: '4px' }}>{f.title}</div>
+                      <div style={{ fontSize: '13px', color: 'rgba(232,224,204,0.6)', lineHeight: '1.6' }}>{f.desc}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div style={styles.divider} />
+
+              {/* Network Details */}
+              <div style={{ fontSize: '12px', color: 'rgba(196,158,71,0.8)', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '10px' }}>
+                Network Details
+              </div>
+              {[
+                ['Consensus', 'Malachite BFT'],
+                ['Execution', 'EVM'],
+                ['Gas Token', 'USDC'],
+                ['Finality', 'Deterministic, &lt;1s'],
+                ['Chain ID', '1313161555'],
+                ['RPC', 'rpc.testnet.arc.network'],
+              ].map(([k, v]) => (
+                <div key={k} style={styles.infoRow}>
+                  <span>{k}</span>
+                  <span style={styles.infoVal} dangerouslySetInnerHTML={{ __html: v }} />
+                </div>
+              ))}
+
+              <div style={styles.divider} />
+
+              <a href="https://docs.arc.network" target="_blank" rel="noreferrer" style={styles.faucetBtn}>
+                Arc Docs ↗
+              </a>
+              <a href="https://arc.network" target="_blank" rel="noreferrer" style={{ ...styles.faucetBtn, marginTop: '8px' }}>
+                arc.network ↗
+              </a>
             </>
           )}
 
