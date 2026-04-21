@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createWalletClient, createPublicClient, custom, http, formatEther, parseUnits } from 'viem'
 import { AppKit } from '@circle-fin/app-kit'
 import { createViemAdapterFromProvider } from '@circle-fin/adapter-viem-v2'
@@ -210,6 +210,7 @@ export default function App() {
   const [swapAmount, setSwapAmount] = useState('')
   const [swapNetwork, setSwapNetwork] = useState('arc')
   const [swapStatus, setSwapStatus] = useState(null)
+  const [swapBalances, setSwapBalances] = useState({})
 
   // Deploy
   const [deployNetwork, setDeployNetwork] = useState('arc')
@@ -232,17 +233,22 @@ export default function App() {
       })
     } catch (e) {
       if (e.code === 4902) {
-        await window.ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: `0x${chain.id.toString(16)}`,
-            chainName: chain.name,
-            rpcUrls: chain.rpcUrls.default.http,
-            nativeCurrency: chain.nativeCurrency,
-            blockExplorerUrls: [chain.blockExplorers.default.url],
-          }],
-        })
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: `0x${chain.id.toString(16)}`,
+              chainName: chain.name,
+              rpcUrls: chain.rpcUrls.default.http,
+              nativeCurrency: chain.nativeCurrency,
+              blockExplorerUrls: [chain.blockExplorers.default.url],
+            }],
+          })
+        } catch {
+          // Network already exists with different RPC — ignore, proceed anyway
+        }
       }
+      // For any other error (e.g. RPC conflict), ignore and proceed
     }
   }
 
@@ -273,6 +279,22 @@ export default function App() {
   }
 
   // ── SWAP ──
+
+  async function fetchSwapBalances(network, addr) {
+    if (!addr) return
+    try {
+      const chain = getChainConfig(network)
+      const tokens = TOKENS[network]
+      const publicClient = createPublicClient({ chain, transport: http(chain.rpcUrls.default.http[0]) })
+      const bals = await Promise.all(
+        tokens.map(t => publicClient.readContract({ address: t.address, abi: ERC20_ABI, functionName: 'balanceOf', args: [addr] }).catch(() => 0n))
+      )
+      const result = {}
+      tokens.forEach((t, i) => { result[t.symbol] = (Number(bals[i]) / 10 ** t.decimals).toFixed(4) })
+      setSwapBalances(result)
+    } catch {}
+  }
+
   async function handleSwap() {
     if (!account || !swapAmount) return
     setLoading(true)
@@ -400,6 +422,8 @@ export default function App() {
     setLoading(false)
   }
 
+  useEffect(() => { if (tab === 'swap' && account) fetchSwapBalances(swapNetwork, account) }, [tab, account, swapNetwork])
+
   const TAB_LABELS = { bridge: 'Bridge', swap: 'Swap', deploy: 'Deploy', lookup: 'Address Lookup', faucet: 'Faucet', about: 'What is Arc?' }
 
   return (
@@ -475,7 +499,7 @@ export default function App() {
                 <div style={styles.cardSub}>Swap between USDC and EURC</div>
 
                 <div style={styles.label}>Network</div>
-                <select style={styles.select} value={swapNetwork} onChange={e => { setSwapNetwork(e.target.value); setSwapFromIdx(0); setSwapToIdx(1) }}>
+                <select style={styles.select} value={swapNetwork} onChange={e => { setSwapNetwork(e.target.value); setSwapFromIdx(0); setSwapToIdx(1); setSwapBalances({}); fetchSwapBalances(e.target.value, account) }}>
                   <option value="arc">Arc Testnet</option>
                   <option value="sepolia">Ethereum Sepolia</option>
                 </select>
@@ -484,8 +508,11 @@ export default function App() {
                 <div style={styles.tokenRow}>
                   {tokens.map((t, i) => (
                     <button key={t.symbol} style={styles.tokenBtn(swapFromIdx === i)}
-                      onClick={() => { setSwapFromIdx(i); if (swapToIdx === i) setSwapToIdx(i === 0 ? 1 : 0) }}>
-                      {t.symbol}
+                      onClick={() => { setSwapFromIdx(i); if (swapToIdx === i) setSwapToIdx(i === 0 ? 1 : 0); fetchSwapBalances(swapNetwork, account) }}>
+                      <div>{t.symbol}</div>
+                      {swapBalances[t.symbol] !== undefined && (
+                        <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '2px' }}>{swapBalances[t.symbol]}</div>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -497,7 +524,10 @@ export default function App() {
                   {tokens.map((t, i) => (
                     <button key={t.symbol} style={styles.tokenBtn(swapToIdx === i)}
                       onClick={() => { setSwapToIdx(i); if (swapFromIdx === i) setSwapFromIdx(i === 0 ? 1 : 0) }}>
-                      {t.symbol}
+                      <div>{t.symbol}</div>
+                      {swapBalances[t.symbol] !== undefined && (
+                        <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '2px' }}>{swapBalances[t.symbol]}</div>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -508,7 +538,7 @@ export default function App() {
                 <div style={styles.divider} />
                 <div style={styles.infoRow}><span>Pair</span><span style={styles.infoVal}>{fromToken.symbol} → {toToken.symbol}</span></div>
                 <div style={styles.infoRow}><span>Slippage</span><span style={styles.infoVal}>0.5%</span></div>
-                <div style={styles.infoRow}><span>From adres</span><span style={styles.infoVal}>{fromToken.address.slice(0, 10)}...</span></div>
+                <div style={styles.infoRow}><span>From address</span><span style={styles.infoVal}>{fromToken.address.slice(0, 10)}...</span></div>
 
                 <button style={styles.btn(!account || !swapAmount || loading)} onClick={handleSwap} disabled={!account || !swapAmount || loading}>
                   {loading ? 'Processing...' : account ? `${fromToken.symbol} → ${toToken.symbol} Swap` : 'Connect wallet first'}
@@ -542,8 +572,8 @@ export default function App() {
               </select>
 
               <div style={styles.divider} />
-              <div style={styles.infoRow}><span>Kontrat</span><span style={styles.infoVal}>HelloArc</span></div>
-              <div style={styles.infoRow}><span>Gas</span><span style={styles.infoVal}>Otomatik</span></div>
+              <div style={styles.infoRow}><span>Contract</span><span style={styles.infoVal}>HelloArc</span></div>
+              <div style={styles.infoRow}><span>Gas</span><span style={styles.infoVal}>Auto</span></div>
               <div style={styles.infoRow}><span>Network</span><span style={styles.infoVal}>{deployNetwork === 'arc' ? 'Arc Testnet' : 'Sepolia'}</span></div>
 
               <button style={styles.btn(!account || loading)} onClick={handleDeploy} disabled={!account || loading}>
