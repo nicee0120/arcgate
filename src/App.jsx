@@ -226,42 +226,41 @@ export default function App() {
   const getExplorerUrl = (net) => net === 'arc' ? 'https://testnet.arcscan.app' : 'https://sepolia.etherscan.io'
 
   async function switchNetwork(chain) {
+    const targetChainId = `0x${chain.id.toString(16)}`
     const currentChainId = await window.ethereum.request({ method: 'eth_chainId' })
-    if (currentChainId === `0x${chain.id.toString(16)}`) return // already on correct network
+    if (currentChainId === targetChainId) return
 
+    // Try switch first — works if network already exists in wallet
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${chain.id.toString(16)}` }],
+        params: [{ chainId: targetChainId }],
       })
-    } catch (e) {
-      if (e.code === 4902) {
-        // Network not added yet — add it
-        await window.ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: `0x${chain.id.toString(16)}`,
-            chainName: chain.name,
-            rpcUrls: chain.rpcUrls.default.http,
-            nativeCurrency: chain.nativeCurrency,
-            blockExplorerUrls: [chain.blockExplorers.default.url],
-          }],
-        })
-      } else if (e.code === -32602 || e.message?.includes('same RPC')) {
-        // RPC conflict — network already exists, just switch
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: `0x${chain.id.toString(16)}` }],
-        })
-      } else {
-        throw new Error(`Please switch your wallet to ${chain.name} and try again.`)
+    } catch (switchErr) {
+      if (switchErr.code === 4902) {
+        // Not in wallet yet — add it (ignore RPC conflict errors silently)
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: targetChainId,
+              chainName: chain.name,
+              rpcUrls: chain.rpcUrls.default.http,
+              nativeCurrency: chain.nativeCurrency,
+              blockExplorerUrls: [chain.blockExplorers.default.url],
+            }],
+          })
+        } catch {
+          // RPC conflict or already exists — ignore, wallet likely switched anyway
+        }
       }
+      // For all other errors: ignore, verify below
     }
 
-    // Verify switch was successful
-    const newChainId = await window.ethereum.request({ method: 'eth_chainId' })
-    if (newChainId !== `0x${chain.id.toString(16)}`) {
-      throw new Error(`Please switch your wallet to ${chain.name} and try again.`)
+    // Final check — if still on wrong network, user must switch manually
+    const finalChainId = await window.ethereum.request({ method: 'eth_chainId' })
+    if (finalChainId !== targetChainId) {
+      throw new Error(`Wrong network. Please switch to ${chain.name} (Chain ID: ${chain.id}) in your wallet.`)
     }
   }
 
@@ -313,33 +312,45 @@ export default function App() {
     setLoading(true)
     setSwapStatus({ type: 'info', msg: 'Preparing swap...' })
     try {
-      const chain = getChainConfig(swapNetwork)
       const tokens = TOKENS[swapNetwork]
       const fromToken = tokens[swapFromIdx]
       const toToken = tokens[swapToIdx]
 
-      await switchNetwork(chain)
+      // Arc Testnet: use kit.swap() — only testnet that supports swap
+      if (swapNetwork === 'arc') {
+        await switchNetwork(ARC_TESTNET)
 
-      const walletClient = createWalletClient({ account, chain, transport: custom(window.ethereum) })
-      const publicClient = createPublicClient({ chain, transport: http(chain.rpcUrls.default.http[0]) })
+        const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
+        const kit = new AppKit()
 
-      const parsedAmount = parseUnits(swapAmount, fromToken.decimals)
+        setSwapStatus({ type: 'info', msg: `Swapping ${swapAmount} ${fromToken.symbol} → ${toToken.symbol}...` })
 
-      setSwapStatus({ type: 'info', msg: `${fromToken.symbol} → ${toToken.symbol} approval in progress...` })
+        const result = await kit.swap({
+          from: { adapter, chain: 'Arc_Testnet' },
+          tokenIn: fromToken.symbol,
+          tokenOut: toToken.symbol,
+          amountIn: swapAmount,
+          config: {
+            kitKey: import.meta.env.VITE_KIT_KEY,
+          },
+        })
 
-      // Approve tx (spender olarak toToken adresi — gerçek DEX'te router adresi olacak)
-      const approveTx = await walletClient.writeContract({
-        address: fromToken.address,
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [toToken.address, parsedAmount],
-      })
-      await publicClient.waitForTransactionReceipt({ hash: approveTx })
-
-      setSwapStatus({
-        type: 'success',
-        msg: `✅ Swap approval complete!\n${swapAmount} ${fromToken.symbol} → ${toToken.symbol}\nTX: ${approveTx.slice(0, 20)}...\n\nNote: A DEX router integration is required for real swaps.`,
-      })
+        const hash = result?.txHash || result?.transactionHash || ''
+        setSwapStatus({
+          type: 'success',
+          msg: `✅ Swap complete!
+${swapAmount} ${fromToken.symbol} → ${result?.amountOut || '?'} ${toToken.symbol}
+TX: ${hash.slice(0, 20)}...
+https://testnet.arcscan.app/tx/${hash}`,
+        })
+        fetchSwapBalances(swapNetwork, account)
+      } else {
+        // Sepolia: kit.swap() not supported, show message
+        setSwapStatus({
+          type: 'error',
+          msg: 'Swap is only available on Arc Testnet. Please switch network to Arc Testnet.',
+        })
+      }
     } catch (e) {
       setSwapStatus({ type: 'error', msg: e?.shortMessage || e?.message || 'Swap failed.' })
     }
