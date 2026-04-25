@@ -379,6 +379,7 @@ return (
               <div style={styles.divider} />
               <a href="https://docs.arc.network" target="_blank" rel="noreferrer" style={styles.faucetBtn}>Arc Docs ↗</a>
               <a href="https://arc.network" target="_blank" rel="noreferrer" style={{ ...styles.faucetBtn, marginTop: '8px' }}>arc.network ↗</a>
+              <a href="https://arc.network/blog" target="_blank" rel="noreferrer" style={{ ...styles.faucetBtn, marginTop: "8px" }}>Arc Blog ↗</a>
             </>
           )}
 
