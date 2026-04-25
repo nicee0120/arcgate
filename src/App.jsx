@@ -287,7 +287,7 @@ return (
               {lookupStatus && <div style={styles.statusBox(lookupStatus.type)}>{lookupStatus.msg}</div>}
               {lookupResult && (
                 <div style={styles.resultBox}>
-                  <div style={styles.resultRow}><span style={styles.resultLabel}>Address</span><span style={styles.resultVal}>{lookupResult.address.slice(0,10)}...{lookupResult.address.slice(-8)}</span></div>
+              <div style={styles.resultRow}><span style={styles.resultLabel}>Address</span><span style={styles.resultVal}>{lookupResult.address.slice(0,10)}...{lookupResult.address.slice(-8)}</span><button onClick={() => navigator.clipboard.writeText(lookupResult.address)} style={{ background: "none", border: "none", cursor: "pointer", color: "#c49e47", fontSize: "12px", marginLeft: "6px" }}>📋</button></div>
                   <div style={styles.resultRow}><span style={styles.resultLabel}>Type</span><span style={styles.resultVal}>{lookupResult.type}</span></div>
                   <div style={styles.resultRow}><span style={styles.resultLabel}>{lookupResult.nativeLabel}</span><span style={styles.resultVal}>{lookupResult.nativeBalance}</span></div>
                   {lookupResult.tokenBalances.map(t => (
