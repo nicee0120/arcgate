@@ -224,7 +224,7 @@ return (
 
       <div style={styles.hero}>
         <h1 style={styles.heroTitle}>ArcGate</h1>
-        <p style={styles.heroSub}>Bridge, deploy and address lookup — the complete toolkit for Arc Testnet.</p>
+        <p style={styles.heroSub}>The all-in-one toolkit for Arc Testnet — bridge USDC, explore addresses and track on-chain activity.</p>
       </div>
 
       <div style={styles.tabs}>
