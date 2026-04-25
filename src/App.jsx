@@ -214,6 +214,7 @@ return (
           <span style={styles.logoText}>ArcGate</span>
         </div>
         <div style={styles.navRight}>
+          <a href="https://testnet.arcscan.app" target="_blank" rel="noreferrer" style={{ fontSize: "12px", color: "rgba(196,158,71,0.6)", textDecoration: "none", padding: "6px 12px", border: "1px solid rgba(196,158,71,0.2)", borderRadius: "16px" }}>ArcScan ↗</a>
           {account
             ? <div style={styles.walletBadge}>{account.slice(0, 6)}...{account.slice(-4)}{walletBalance !== null ? ' | ' + walletBalance + ' USDC' : ''}</div>
             : <button style={styles.connectNavBtn} onClick={connectWallet}>Connect Wallet</button>
