@@ -388,7 +388,7 @@ return (
       </div>
 
       <div style={{ textAlign: "center", padding: "1.5rem", borderTop: "1px solid rgba(196,158,71,0.1)", fontSize: "12px", color: "rgba(232,224,204,0.3)" }}>
-        Built with ♥ on Arc Testnet | v1.0.0 | by cio
+        Built with ♥ on Arc Testnet | v1.0.0 | by cio | <a href="https://github.com/nicee0120/arcgate" target="_blank" rel="noreferrer" style={{ color: "rgba(196,158,71,0.5)", textDecoration: "none" }}>GitHub</a>
       </div>
     </div>
   )
