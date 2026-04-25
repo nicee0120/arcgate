@@ -380,6 +380,7 @@ return (
               ))}
               <div style={styles.divider} />
               <a href="https://docs.arc.network" target="_blank" rel="noreferrer" style={styles.faucetBtn}>Arc Docs ↗</a>
+              <a href="https://circle.com" target="_blank" rel="noreferrer" style={{ ...styles.faucetBtn, marginTop: "8px" }}>Circle.com ↗</a>
               <a href="https://arc.network" target="_blank" rel="noreferrer" style={{ ...styles.faucetBtn, marginTop: '8px' }}>arc.network ↗</a>
               <a href="https://arc.network/blog" target="_blank" rel="noreferrer" style={{ ...styles.faucetBtn, marginTop: "8px" }}>Arc Blog ↗</a>
               <a href="https://testnet.arcscan.app" target="_blank" rel="noreferrer" style={{ ...styles.faucetBtn, marginTop: "8px" }}>ArcScan Explorer ↗</a>
