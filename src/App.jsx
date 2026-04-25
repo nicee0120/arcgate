@@ -267,7 +267,7 @@ return (
               <div style={styles.infoRow}><span>Bridge fee</span><span style={styles.infoVal}>~0.001 USDC</span></div>
               <div style={styles.infoRow}><span>Estimated time</span><span style={styles.infoVal}>~20-30 seconds</span></div>
               <button style={styles.btn(!account || !amount || loading)} onClick={handleBridge} disabled={!account || !amount || loading}>
-                {loading ? 'Bridging...' : account ? 'Bridge ' + bridgeToken : 'Connect wallet first'}
+                {loading ? 'Bridging...' : account ? 'Bridge ' + fromChain.replace('_', ' ') + ' → ' + toChain.replace('_', ' ') : 'Connect wallet first'}
               </button>
               {bridgeStatus && <div style={styles.statusBox(bridgeStatus.type)}>{bridgeStatus.msg}</div>}
             </>
@@ -281,7 +281,7 @@ return (
                 <option value="arc">Arc Testnet</option>
               </select>
               <div style={styles.label}>Address</div>
-              <input style={styles.input} placeholder="0x..." value={lookupAddress} onChange={e => setLookupAddress(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLookup()} />
+              <input style={styles.input} placeholder="e.g. 0xACD46e5c...FD757107" value={lookupAddress} onChange={e => setLookupAddress(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLookup()} />
               <button style={styles.btn(!lookupAddress.trim() || loading)} onClick={handleLookup} disabled={!lookupAddress.trim() || loading}>
                 {loading ? 'Looking up...' : 'Look Up'}
               </button>
