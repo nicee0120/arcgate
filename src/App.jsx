@@ -260,7 +260,7 @@ return (
               <div style={styles.divider} />
               <div style={styles.infoRow}><span>Token</span><span style={styles.infoVal}>USDC</span></div>
               <div style={styles.infoRow}><span>Protocol</span><span style={styles.infoVal}>CCTP</span></div>
-              <div style={styles.infoRow}><span>Estimated time</span><span style={styles.infoVal}>~20 seconds</span></div>
+              <div style={styles.infoRow}><span>Estimated time</span><span style={styles.infoVal}>~20-30 seconds</span></div>
               <button style={styles.btn(!account || !amount || loading)} onClick={handleBridge} disabled={!account || !amount || loading}>
                 {loading ? 'Bridging...' : account ? 'Bridge ' + bridgeToken : 'Connect wallet first'}
               </button>
