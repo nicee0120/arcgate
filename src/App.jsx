@@ -241,7 +241,7 @@ return (
               <div style={styles.cardTitle}>Bridge USDC</div>
               <div style={styles.cardSub}>Transfer USDC across chains via Circle CCTP protocol</div>
               <div style={styles.label}>From</div>
-              <select style={styles.select} value={fromChain} onChange={e => setFromChain(e.target.value)}>
+              <select style={styles.select} value={fromChain} onChange={e => { setFromChain(e.target.value); if (e.target.value === toChain) setToChain(e.target.value === 'Arc_Testnet' ? 'Ethereum_Sepolia' : 'Arc_Testnet') }}>
                 <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
                 <option value="Arc_Testnet">Arc Testnet</option>
                 <option value="Base_Sepolia">Base Sepolia</option>
