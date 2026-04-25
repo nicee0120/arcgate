@@ -239,7 +239,7 @@ return (
           {tab === 'bridge' && (
             <>
               <div style={styles.cardTitle}>Bridge USDC</div>
-              <div style={styles.cardSub}>Transfer USDC across chains via CCTP</div>
+              <div style={styles.cardSub}>Transfer USDC across chains via Circle CCTP protocol</div>
               <div style={styles.label}>From</div>
               <select style={styles.select} value={fromChain} onChange={e => setFromChain(e.target.value)}>
                 <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
