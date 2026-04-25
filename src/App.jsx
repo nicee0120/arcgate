@@ -255,7 +255,10 @@ return (
                 <option value="Base_Sepolia">Base Sepolia</option>
                 <option value="Avalanche_Fuji">Avalanche Fuji</option>
               </select>
-              <div style={styles.label}>Amount (USDC)</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                <div style={styles.label}>Amount (USDC)</div>
+                <button onClick={() => setAmount("100")} style={{ fontSize: "11px", color: "#c49e47", background: "none", border: "none", cursor: "pointer" }}>MAX</button>
+              </div>
               <input style={styles.input} type="number" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
               <div style={styles.divider} />
               <div style={styles.infoRow}><span>Token</span><span style={styles.infoVal}>USDC</span></div>
