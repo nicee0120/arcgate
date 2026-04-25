@@ -379,7 +379,7 @@ return (
               ))}
               <div style={styles.divider} />
               <div style={{ fontSize: '12px', color: 'rgba(196,158,71,0.8)', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '10px' }}>Network Details</div>
-              {[['Consensus','Malachite BFT'],['Execution','EVM'],['Gas Token','USDC'],['Finality','Deterministic, <1s'],['Chain ID','5042002'],['RPC','rpc.testnet.arc.network']].map(([k,v]) => (
+              {[['Consensus','Malachite BFT'],['Execution','EVM'],['Gas Token','USDC'],['Finality','Deterministic, <1s'],['Chain ID','5042002'],['RPC','rpc.testnet.arc.network'],['USDC','0x3600...0000'],['EURC','0x89B5...D72a']].map(([k,v]) => (
                 <div key={k} style={styles.infoRow}><span>{k}</span><span style={styles.infoVal}>{v}</span></div>
               ))}
               <div style={styles.divider} />
