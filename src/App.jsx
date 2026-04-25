@@ -73,9 +73,11 @@ export default function App() {
   const [tab, setTab] = useState('bridge')
   const [account, setAccount] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [walletBalance, setWalletBalance] = useState(null)
 
   const [amount, setAmount] = useState('')
   const [bridgeStatus, setBridgeStatus] = useState(null)
+  const [bridgeToken, setBridgeToken] = useState('USDC')
   const [fromChain, setFromChain] = useState('Ethereum_Sepolia')
   const [toChain, setToChain] = useState('Arc_Testnet')
 
@@ -105,6 +107,12 @@ export default function App() {
     try {
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
       setAccount(accounts[0])
+      // Fetch USDC balance
+      try {
+        const pub = createPublicClient({ chain: ARC_TESTNET, transport: http(ARC_TESTNET.rpcUrls.default.http[0]) })
+        const bal = await pub.readContract({ address: '0x3600000000000000000000000000000000000000', abi: ERC20_ABI, functionName: 'balanceOf', args: [accounts[0]] })
+        setWalletBalance((Number(bal) / 1e6).toFixed(2))
+      } catch {}
     } catch { alert('Connection cancelled.') }
   }
 
@@ -116,7 +124,7 @@ export default function App() {
       const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
       const kit = new AppKit()
       setBridgeStatus({ type: 'info', msg: 'Confirm in your wallet...' })
-      const result = await kit.bridge({ from: { adapter, chain: fromChain }, to: { adapter, chain: toChain }, amount, token: 'USDC' })
+      const result = await kit.bridge({ from: { adapter, chain: fromChain }, to: { adapter, chain: toChain }, amount, token: bridgeToken })
       const hash = result?.transactionHash || result?.txHash || ''
       setBridgeStatus({ type: 'success', msg: `Bridge successful!\nTX: ${hash.slice(0, 20)}...` })
     } catch (e) {
@@ -196,7 +204,7 @@ return (
         </div>
         <div style={styles.navRight}>
           {account
-            ? <div style={styles.walletBadge}>{account.slice(0, 6)}...{account.slice(-4)}</div>
+            ? <div style={styles.walletBadge}>{account.slice(0, 6)}...{account.slice(-4)}{walletBalance !== null ? ' | ' + walletBalance + ' USDC' : ''}</div>
             : <button style={styles.connectNavBtn} onClick={connectWallet}>Connect Wallet</button>
           }
         </div>
@@ -242,7 +250,7 @@ return (
               <div style={styles.infoRow}><span>Protocol</span><span style={styles.infoVal}>CCTP</span></div>
               <div style={styles.infoRow}><span>Estimated time</span><span style={styles.infoVal}>~20 seconds</span></div>
               <button style={styles.btn(!account || !amount || loading)} onClick={handleBridge} disabled={!account || !amount || loading}>
-                {loading ? 'Bridging...' : account ? 'Bridge USDC' : 'Connect wallet first'}
+                {loading ? 'Bridging...' : account ? 'Bridge ' + bridgeToken : 'Connect wallet first'}
               </button>
               {bridgeStatus && <div style={styles.statusBox(bridgeStatus.type)}>{bridgeStatus.msg}</div>}
             </>
