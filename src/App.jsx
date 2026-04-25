@@ -227,7 +227,7 @@ return (
                 <option value="Base_Sepolia">Base Sepolia</option>
                 <option value="Avalanche_Fuji">Avalanche Fuji</option>
               </select>
-              <div style={styles.arrow}>↓</div>
+              <div style={styles.arrow}><button onClick={() => { const tmp = fromChain; setFromChain(toChain); setToChain(tmp) }} style={{ background: 'none', border: '1px solid rgba(196,158,71,0.3)', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', color: '#c49e47', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>↕</button></div>
               <div style={styles.label}>To</div>
               <select style={styles.select} value={toChain} onChange={e => setToChain(e.target.value)}>
                 <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
