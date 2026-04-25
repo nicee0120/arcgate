@@ -89,6 +89,15 @@ export default function App() {
   const getChainConfig = (net) => net === 'arc' ? ARC_TESTNET : SEPOLIA
   const getExplorerUrl = (net) => net === 'arc' ? 'https://testnet.arcscan.app' : 'https://sepolia.etherscan.io'
 
+  async function fetchWalletBalance(addr, network) {
+    try {
+      const chain = network === "arc" ? ARC_TESTNET : SEPOLIA
+      const pub = createPublicClient({ chain, transport: http(chain.rpcUrls.default.http[0]) })
+      const bal = await pub.readContract({ address: "0x3600000000000000000000000000000000000000", abi: ERC20_ABI, functionName: "balanceOf", args: [addr] })
+      setWalletBalance((Number(bal) / 1e6).toFixed(2) + " USDC")
+    } catch { setWalletBalance(null) }
+  }
+
   async function switchNetwork(chain) {
     const targetChainId = `0x${chain.id.toString(16)}`
     const currentChainId = await window.ethereum.request({ method: 'eth_chainId' })
@@ -97,6 +106,8 @@ export default function App() {
       await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: targetChainId }] })
     } catch (e) { }
     const finalChainId = await window.ethereum.request({ method: 'eth_chainId' })
+    const net = finalChainId === '0x4cef52' ? 'arc' : 'sepolia'
+    if (account) fetchWalletBalance(account, net)
     if (finalChainId !== targetChainId) {
       throw new Error(`Please switch to ${chain.name} in your wallet and try again.`)
     }
