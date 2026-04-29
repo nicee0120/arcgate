@@ -86,6 +86,15 @@ export default function App() {
   const [lookupResult, setLookupResult] = useState(null)
   const [lookupStatus, setLookupStatus] = useState(null)
 
+  useEffect(() => {
+    const saved = localStorage.getItem("arcgate_wallet")
+    if (saved && window.ethereum) {
+      window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+        if (accounts.includes(saved)) setAccount(saved)
+      })
+    }
+  }, [])
+
   const getChainConfig = (net) => net === 'arc' ? ARC_TESTNET : SEPOLIA
   const getExplorerUrl = (net) => net === 'arc' ? 'https://testnet.arcscan.app' : 'https://sepolia.etherscan.io'
 
@@ -117,7 +126,7 @@ export default function App() {
     if (!window.ethereum) { alert('No EVM wallet found. Install MetaMask or Rabby.'); return }
     try {
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
-      setAccount(accounts[0])
+      setAccount(accounts[0]); localStorage.setItem("arcgate_wallet", accounts[0])
       // Fetch USDC balance
       try {
         const pub = createPublicClient({ chain: ARC_TESTNET, transport: http(ARC_TESTNET.rpcUrls.default.http[0]) })
@@ -395,7 +404,7 @@ return (
       </div>
 
       <div style={{ textAlign: "center", padding: "1.5rem", borderTop: "1px solid rgba(196,158,71,0.1)", fontSize: "12px", color: "rgba(232,224,204,0.3)" }}>
-        Built with ♥ on Arc Testnet | v1.0.0 - Apr 2026 | by cio | <a href="https://github.com/nicee0120/arcgate" target="_blank" rel="noreferrer" style={{ color: "rgba(196,158,71,0.5)", textDecoration: "none" }}>GitHub</a>
+        Built with ♥ on Arc Testnet | v1.0.0 - Apr 2026 | by cio | <a href="https://x.com/nice012023" target="_blank" rel="noreferrer" style={{ color: "rgba(196,158,71,0.5)", textDecoration: "none" }}>𝕏</a> | <a href="https://github.com/nicee0120/arcgate" target="_blank" rel="noreferrer" style={{ color: "rgba(196,158,71,0.5)", textDecoration: "none" }}>GitHub</a>
       </div>
     </div>
   )
