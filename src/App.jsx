@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { createWalletClient, createPublicClient, custom, http, formatEther, parseUnits } from 'viem'
 import { AppKit } from '@circle-fin/app-kit'
+import { UnifiedBalanceKit } from '@circle-fin/unified-balance-kit'
 import { createViemAdapterFromProvider } from '@circle-fin/adapter-viem-v2'
 
 const ARC_TESTNET = {
@@ -81,6 +82,11 @@ export default function App() {
   const [fromChain, setFromChain] = useState('Ethereum_Sepolia')
   const [toChain, setToChain] = useState('Arc_Testnet')
 
+  const [unifiedBalances, setUnifiedBalances] = useState(null)
+  const [unifiedStatus, setUnifiedStatus] = useState(null)
+  const [spendTo, setSpendTo] = useState('')
+  const [spendAmount, setSpendAmount] = useState('')
+  const [spendChain, setSpendChain] = useState('Ethereum_Sepolia')
   const [lookupAddress, setLookupAddress] = useState('')
   const [lookupNetwork, setLookupNetwork] = useState('arc')
   const [lookupResult, setLookupResult] = useState(null)
@@ -214,7 +220,7 @@ export default function App() {
     setLoading(false)
   }
 
-  const TAB_LABELS = { bridge: 'Bridge', lookup: 'Address Lookup', faucet: 'Faucet', about: 'What is Arc?' }
+  const TAB_LABELS = { bridge: 'Bridge', unified: 'Unified Balance', lookup: 'Address Lookup', faucet: 'Faucet', about: 'What is Arc?' }
 return (
     <div style={styles.app}>
       <nav style={styles.nav}>
@@ -281,6 +287,39 @@ return (
               {bridgeStatus && <div style={styles.statusBox(bridgeStatus.type)}>{bridgeStatus.msg}</div>}
             </>
           )}
+          {tab === 'unified' && (
+            <>
+              <div style={styles.cardTitle}>Unified Balance</div>
+              <div style={styles.cardSub}>Manage USDC via Circle Gateway</div>
+              <button style={styles.btn(!account || loading)} disabled={!account || loading} onClick={async () => { setLoading(true); setUnifiedStatus({ type: 'info', msg: 'Fetching...' }); try { const kit = new UnifiedBalanceKit(); const r = await kit.getBalances({ sources: { address: account }, networkType: 'testnet', includePending: true }); setUnifiedBalances(r); setUnifiedStatus(null) } catch(e) { setUnifiedStatus({ type: 'error', msg: e?.message || 'Failed.' }) } setLoading(false) }}>
+                {loading ? 'Loading...' : account ? 'Get Balances' : 'Connect wallet first'}
+              </button>
+              {unifiedStatus && <div style={styles.statusBox(unifiedStatus.type)}>{unifiedStatus.msg}</div>}
+              {unifiedBalances && (
+                <div style={styles.resultBox}>
+                  <div style={{ fontSize: '12px', color: 'rgba(196,158,71,0.8)', fontWeight: '600', marginBottom: '10px', textTransform: 'uppercase' }}>
+                    Gateway Balance — {unifiedBalances.token}
+                  </div>
+                  <div style={styles.infoRow}>
+                    <span>Total Confirmed</span>
+                    <span style={styles.infoVal}>{unifiedBalances.totalConfirmedBalance} USDC</span>
+                  </div>
+                  <div style={styles.infoRow}>
+                    <span>Total Pending</span>
+                    <span style={styles.infoVal}>{unifiedBalances.totalPendingBalance} USDC</span>
+                  </div>
+                  <div style={styles.divider} />
+                  {unifiedBalances.breakdown?.[0]?.breakdown?.map(b => (
+                    <div key={b.chain} style={styles.infoRow}>
+                      <span style={{ fontSize: '12px' }}>{b.chain.replace(/_/g, ' ')}</span>
+                      <span style={styles.infoVal}>{b.confirmedBalance} USDC</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
 {tab === 'lookup' && (
             <>
               <div style={styles.cardTitle}>Address Lookup</div>
