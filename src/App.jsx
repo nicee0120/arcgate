@@ -29,6 +29,9 @@ const TOKENS = {
   base: [
     { symbol: 'USDC', address: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', decimals: 6 },
   ],
+  avalanche: [
+    { symbol: 'USDC', address: '0x5425890298aed601595a70AB815c96711a31Bc65', decimals: 6 },
+  ],
   sepolia: [
     { symbol: 'USDC', address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', decimals: 6 },
     { symbol: 'EURC', address: '0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4', decimals: 6 },
@@ -108,8 +111,9 @@ export default function App() {
     }
   }, [])
 
-  const getChainConfig = (net) => net === 'arc' ? ARC_TESTNET : net === 'base' ? { id: 84532, name: 'Base Sepolia', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: ['https://sepolia.base.org'] } }, blockExplorers: { default: { name: 'BaseScan', url: 'https://sepolia.basescan.org' } } } : SEPOLIA
-  const getExplorerUrl = (net) => net === 'arc' ? 'https://testnet.arcscan.app' : net === 'base' ? 'https://sepolia.basescan.org' : 'https://sepolia.etherscan.io'
+  const AVALANCHE_FUJI = { id: 43113, name: 'Avalanche Fuji', nativeCurrency: { name: 'AVAX', symbol: 'AVAX', decimals: 18 }, rpcUrls: { default: { http: ['https://api.avax-test.network/ext/bc/C/rpc'] } }, blockExplorers: { default: { name: 'SnowTrace', url: 'https://testnet.snowtrace.io' } } }
+  const getChainConfig = (net) => net === 'arc' ? ARC_TESTNET : net === 'base' ? { id: 84532, name: 'Base Sepolia', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: ['https://sepolia.base.org'] } }, blockExplorers: { default: { name: 'BaseScan', url: 'https://sepolia.basescan.org' } } } : net === 'avalanche' ? AVALANCHE_FUJI : SEPOLIA
+  const getExplorerUrl = (net) => net === 'arc' ? 'https://testnet.arcscan.app' : net === 'base' ? 'https://sepolia.basescan.org' : net === 'avalanche' ? 'https://testnet.snowtrace.io' : 'https://sepolia.etherscan.io'
 
   async function fetchWalletBalance(addr, network) {
     try {
@@ -186,7 +190,8 @@ export default function App() {
 
       const isContract = code && code !== '0x' && code.length > 2
       const isArc = lookupNetwork === 'arc'
-      const nativeLabel = isArc ? 'USDC (native)' : 'ETH'
+      const nativeSymbol = lookupNetwork === 'avalanche' ? 'AVAX' : lookupNetwork === 'arc' ? 'USDC' : 'ETH'
+      const nativeLabel = isArc ? 'USDC (native)' : lookupNetwork === 'avalanche' ? 'AVAX' : 'ETH'
       const nativeFormatted = parseFloat(formatEther(nativeBalance)).toFixed(4)
       const tokenResults = tokens.map((t, i) => ({ symbol: t.symbol, balance: (Number(tokenBalances[i]) / 10 ** t.decimals).toFixed(4) }))
 
@@ -419,6 +424,7 @@ return (
                 <option value="arc">Arc Testnet</option>
                 <option value="sepolia">Ethereum Sepolia</option>
                 <option value="base">Base Sepolia</option>
+                <option value="avalanche">Avalanche Fuji</option>
               </select>
               <div style={styles.label}>Address</div>
               <input style={styles.input} placeholder="e.g. 0xACD46e5c...FD757107" value={lookupAddress} onChange={e => setLookupAddress(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLookup()} />
