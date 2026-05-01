@@ -14,8 +14,10 @@ const ARC_TESTNET = {
 
 const SEPOLIA = {
   id: 11155111,
+  name: 'Ethereum Sepolia',
+  name: 'Ethereum Sepolia',
   nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-  rpcUrls: { default: { http: ['https://rpc.sepolia.org'] } },
+  rpcUrls: { default: { http: ['https://ethereum-sepolia-rpc.publicnode.com'] } },
   blockExplorers: { default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' } },
 }
 
@@ -23,6 +25,9 @@ const TOKENS = {
   arc: [
     { symbol: 'USDC', address: '0x3600000000000000000000000000000000000000', decimals: 6 },
     { symbol: 'EURC', address: '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a', decimals: 6 },
+  ],
+  base: [
+    { symbol: 'USDC', address: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', decimals: 6 },
   ],
   sepolia: [
     { symbol: 'USDC', address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', decimals: 6 },
@@ -84,7 +89,8 @@ export default function App() {
 
   const [unifiedBalances, setUnifiedBalances] = useState(null)
   const [unifiedStatus, setUnifiedStatus] = useState(null)
-  const [spendTo, setSpendTo] = useState('')
+  const [spendTo, setSpendTo] = useState('Ethereum_Sepolia')
+  const [spendRecipient, setSpendRecipient] = useState('')
   const [spendAmount, setSpendAmount] = useState('')
   const [spendChain, setSpendChain] = useState('Ethereum_Sepolia')
   const [lookupAddress, setLookupAddress] = useState('')
@@ -101,8 +107,8 @@ export default function App() {
     }
   }, [])
 
-  const getChainConfig = (net) => net === 'arc' ? ARC_TESTNET : SEPOLIA
-  const getExplorerUrl = (net) => net === 'arc' ? 'https://testnet.arcscan.app' : 'https://sepolia.etherscan.io'
+  const getChainConfig = (net) => net === 'arc' ? ARC_TESTNET : net === 'base' ? { id: 84532, name: 'Base Sepolia', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: ['https://sepolia.base.org'] } }, blockExplorers: { default: { name: 'BaseScan', url: 'https://sepolia.basescan.org' } } } : SEPOLIA
+  const getExplorerUrl = (net) => net === 'arc' ? 'https://testnet.arcscan.app' : net === 'base' ? 'https://sepolia.basescan.org' : 'https://sepolia.etherscan.io'
 
   async function fetchWalletBalance(addr, network) {
     try {
@@ -291,10 +297,71 @@ return (
             <>
               <div style={styles.cardTitle}>Unified Balance</div>
               <div style={styles.cardSub}>Manage USDC via Circle Gateway</div>
-              <button style={styles.btn(!account || loading)} disabled={!account || loading} onClick={async () => { setLoading(true); setUnifiedStatus({ type: 'info', msg: 'Fetching...' }); try { const kit = new UnifiedBalanceKit(); const r = await kit.getBalances({ sources: { address: account }, networkType: 'testnet', includePending: true }); setUnifiedBalances(r); setUnifiedStatus(null) } catch(e) { setUnifiedStatus({ type: 'error', msg: e?.message || 'Failed.' }) } setLoading(false) }}>
+              <button style={styles.btn(!account || loading)} disabled={!account || loading} onClick={async () => { setLoading(true); setUnifiedStatus({ type: 'info', msg: 'Fetching...' }); try { const kit = new AppKit(); const r = await kit.unifiedBalance.getBalances({ sources: { address: account }, networkType: 'testnet', includePending: true }); setUnifiedBalances(r); setUnifiedStatus(null) } catch(e) { setUnifiedStatus({ type: 'error', msg: e?.message || 'Failed.' }) } setLoading(false) }}>
                 {loading ? 'Loading...' : account ? 'Get Balances' : 'Connect wallet first'}
               </button>
               {unifiedStatus && <div style={styles.statusBox(unifiedStatus.type)}>{unifiedStatus.msg}</div>}
+              <div style={styles.divider} />
+              <div style={styles.label}>Source Chain</div>
+              <select style={styles.select} value={spendChain} onChange={e => setSpendChain(e.target.value)}>
+                <option value="Arc_Testnet">Arc Testnet</option>
+                <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
+                <option value="Base_Sepolia">Base Sepolia</option>
+                <option value="Avalanche_Fuji">Avalanche Fuji</option>
+              </select>
+              <div style={styles.label}>Amount (USDC)</div>
+              <input style={styles.input} type="number" placeholder="0.00" value={spendAmount} onChange={e => setSpendAmount(e.target.value)} />
+              <button style={styles.btn(!account || !spendAmount || loading)} disabled={!account || !spendAmount || loading} onClick={async () => {
+                setLoading(true)
+                setUnifiedStatus({ type: 'info', msg: 'Depositing to Gateway...' })
+                try {
+                  const depositChain = spendChain === 'Arc_Testnet' ? ARC_TESTNET : spendChain === 'Ethereum_Sepolia' ? SEPOLIA : SEPOLIA
+                  await switchNetwork(depositChain)
+                  const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
+                  const kit = new AppKit()
+                  const result = await kit.unifiedBalance.deposit({
+                    from: { adapter, chain: spendChain },
+                    amount: spendAmount,
+                    token: 'USDC',
+                  })
+                  setUnifiedStatus({ type: 'success', msg: 'Deposit successful! TX: ' + (result?.txHash || result?.transactionHash || '').slice(0,20) + '...' })
+                } catch(e) { setUnifiedStatus({ type: 'error', msg: e?.message || 'Deposit failed.' }) }
+                setLoading(false)
+              }}>
+                {loading ? 'Depositing...' : account ? 'Deposit to Gateway' : 'Connect wallet first'}
+              </button>
+
+              <div style={styles.divider} />
+              <div style={styles.label}>Destination Chain</div>
+              <select style={styles.select} value={spendTo} onChange={e => setSpendTo(e.target.value)}>
+                <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
+                <option value="Arc_Testnet">Arc Testnet</option>
+                <option value="Base_Sepolia">Base Sepolia</option>
+                <option value="Avalanche_Fuji">Avalanche Fuji</option>
+              </select>
+              <div style={styles.label}>Recipient Address</div>
+              <input style={styles.input} placeholder="0x..." value={spendRecipient} onChange={e => setSpendRecipient(e.target.value)} />
+              <div style={styles.label}>Amount (USDC)</div>
+              <input style={styles.input} type="number" placeholder="0.00" value={spendAmount} onChange={e => setSpendAmount(e.target.value)} />
+              <button style={styles.btn(!account || !spendRecipient || !spendAmount || loading)} disabled={!account || !spendRecipient || !spendAmount || loading} onClick={async () => {
+                setLoading(true)
+                setUnifiedStatus({ type: 'info', msg: 'Processing spend...' })
+                try {
+                  const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
+                  const kit = new AppKit()
+                  const result = await kit.unifiedBalance.spend({
+                    amount: spendAmount,
+                    from: { adapter, allocations: { amount: spendAmount, chain: spendChain } },
+                    to: { adapter, chain: spendTo, recipientAddress: spendRecipient },
+                    token: 'USDC',
+                  })
+                  setUnifiedStatus({ type: 'success', msg: 'Spend successful! TX: ' + (result?.txHash || result?.transactionHash || '').slice(0,20) + '...' })
+                } catch(e) { setUnifiedStatus({ type: 'error', msg: e?.message || 'Spend failed.' }) }
+                setLoading(false)
+              }}>
+                {loading ? 'Processing...' : account ? 'Spend USDC' : 'Connect wallet first'}
+              </button>
+
               {unifiedBalances && (
                 <div style={styles.resultBox}>
                   <div style={{ fontSize: '12px', color: 'rgba(196,158,71,0.8)', fontWeight: '600', marginBottom: '10px', textTransform: 'uppercase' }}>
@@ -327,6 +394,8 @@ return (
               <div style={styles.label}>Network</div>
               <select style={styles.select} value={lookupNetwork} onChange={e => { setLookupNetwork(e.target.value); setLookupResult(null) }}>
                 <option value="arc">Arc Testnet</option>
+                <option value="sepolia">Ethereum Sepolia</option>
+                <option value="base">Base Sepolia</option>
               </select>
               <div style={styles.label}>Address</div>
               <input style={styles.input} placeholder="e.g. 0xACD46e5c...FD757107" value={lookupAddress} onChange={e => setLookupAddress(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLookup()} />
