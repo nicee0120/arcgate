@@ -89,6 +89,7 @@ export default function App() {
 
   const [unifiedBalances, setUnifiedBalances] = useState(null)
   const [unifiedStatus, setUnifiedStatus] = useState(null)
+  const [unifiedSubTab, setUnifiedSubTab] = useState('deposit')
   const [spendTo, setSpendTo] = useState('Ethereum_Sepolia')
   const [spendRecipient, setSpendRecipient] = useState('')
   const [spendAmount, setSpendAmount] = useState('')
@@ -226,6 +227,43 @@ export default function App() {
     setLoading(false)
   }
 
+  async function handleDeposit() {
+    if (!account || !spendAmount) return
+    setLoading(true); setUnifiedStatus({ type: 'info', msg: 'Depositing...' })
+    try {
+      const dc = spendChain === 'Arc_Testnet' ? ARC_TESTNET : SEPOLIA
+      await switchNetwork(dc)
+      const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
+      const kit = new AppKit()
+      const r = await kit.unifiedBalance.deposit({ from: { adapter, chain: spendChain }, amount: spendAmount, token: 'USDC' })
+      setUnifiedStatus({ type: 'success', msg: 'Deposit OK! TX: ' + (r?.txHash || r?.transactionHash || '').slice(0,20) + '...' })
+    } catch(e) { setUnifiedStatus({ type: 'error', msg: e?.message || 'Deposit failed.' }) }
+    setLoading(false)
+  }
+
+  async function handleGetBalances() {
+    if (!account) return
+    setLoading(true); setUnifiedStatus({ type: 'info', msg: 'Fetching...' })
+    try {
+      const kit = new AppKit()
+      const r = await kit.unifiedBalance.getBalances({ sources: { address: account }, networkType: 'testnet', includePending: true })
+      setUnifiedBalances(r); setUnifiedStatus(null)
+    } catch(e) { setUnifiedStatus({ type: 'error', msg: e?.message || 'Failed.' }) }
+    setLoading(false)
+  }
+
+  async function handleSpend() {
+    if (!account || !spendRecipient || !spendAmount) return
+    setLoading(true); setUnifiedStatus({ type: 'info', msg: 'Processing spend...' })
+    try {
+      const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
+      const kit = new AppKit()
+      const r = await kit.unifiedBalance.spend({ amount: spendAmount, from: { adapter, allocations: { amount: spendAmount, chain: spendChain } }, to: { adapter, chain: spendTo, recipientAddress: spendRecipient }, token: 'USDC' })
+      setUnifiedStatus({ type: 'success', msg: 'Spend OK! TX: ' + (r?.txHash || r?.transactionHash || '').slice(0,20) + '...' })
+    } catch(e) { setUnifiedStatus({ type: 'error', msg: e?.message || 'Spend failed.' }) }
+    setLoading(false)
+  }
+
   const TAB_LABELS = { bridge: 'Bridge', unified: 'Unified Balance', lookup: 'Address Lookup', faucet: 'Faucet', about: 'What is Arc?' }
 return (
     <div style={styles.app}>
@@ -297,92 +335,77 @@ return (
             <>
               <div style={styles.cardTitle}>Unified Balance</div>
               <div style={styles.cardSub}>Manage USDC via Circle Gateway</div>
-              <button style={styles.btn(!account || loading)} disabled={!account || loading} onClick={async () => { setLoading(true); setUnifiedStatus({ type: 'info', msg: 'Fetching...' }); try { const kit = new AppKit(); const r = await kit.unifiedBalance.getBalances({ sources: { address: account }, networkType: 'testnet', includePending: true }); setUnifiedBalances(r); setUnifiedStatus(null) } catch(e) { setUnifiedStatus({ type: 'error', msg: e?.message || 'Failed.' }) } setLoading(false) }}>
-                {loading ? 'Loading...' : account ? 'Get Balances' : 'Connect wallet first'}
-              </button>
-              {unifiedStatus && <div style={styles.statusBox(unifiedStatus.type)}>{unifiedStatus.msg}</div>}
-              <div style={styles.divider} />
-              <div style={styles.label}>Source Chain</div>
-              <select style={styles.select} value={spendChain} onChange={e => setSpendChain(e.target.value)}>
-                <option value="Arc_Testnet">Arc Testnet</option>
-                <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
-                <option value="Base_Sepolia">Base Sepolia</option>
-                <option value="Avalanche_Fuji">Avalanche Fuji</option>
-              </select>
-              <div style={styles.label}>Amount (USDC)</div>
-              <input style={styles.input} type="number" placeholder="0.00" value={spendAmount} onChange={e => setSpendAmount(e.target.value)} />
-              <button style={styles.btn(!account || !spendAmount || loading)} disabled={!account || !spendAmount || loading} onClick={async () => {
-                setLoading(true)
-                setUnifiedStatus({ type: 'info', msg: 'Depositing to Gateway...' })
-                try {
-                  const depositChain = spendChain === 'Arc_Testnet' ? ARC_TESTNET : spendChain === 'Ethereum_Sepolia' ? SEPOLIA : SEPOLIA
-                  await switchNetwork(depositChain)
-                  const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
-                  const kit = new AppKit()
-                  const result = await kit.unifiedBalance.deposit({
-                    from: { adapter, chain: spendChain },
-                    amount: spendAmount,
-                    token: 'USDC',
-                  })
-                  setUnifiedStatus({ type: 'success', msg: 'Deposit successful! TX: ' + (result?.txHash || result?.transactionHash || '').slice(0,20) + '...' })
-                } catch(e) { setUnifiedStatus({ type: 'error', msg: e?.message || 'Deposit failed.' }) }
-                setLoading(false)
-              }}>
-                {loading ? 'Depositing...' : account ? 'Deposit to Gateway' : 'Connect wallet first'}
-              </button>
-
-              <div style={styles.divider} />
-              <div style={styles.label}>Destination Chain</div>
-              <select style={styles.select} value={spendTo} onChange={e => setSpendTo(e.target.value)}>
-                <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
-                <option value="Arc_Testnet">Arc Testnet</option>
-                <option value="Base_Sepolia">Base Sepolia</option>
-                <option value="Avalanche_Fuji">Avalanche Fuji</option>
-              </select>
-              <div style={styles.label}>Recipient Address</div>
-              <input style={styles.input} placeholder="0x..." value={spendRecipient} onChange={e => setSpendRecipient(e.target.value)} />
-              <div style={styles.label}>Amount (USDC)</div>
-              <input style={styles.input} type="number" placeholder="0.00" value={spendAmount} onChange={e => setSpendAmount(e.target.value)} />
-              <button style={styles.btn(!account || !spendRecipient || !spendAmount || loading)} disabled={!account || !spendRecipient || !spendAmount || loading} onClick={async () => {
-                setLoading(true)
-                setUnifiedStatus({ type: 'info', msg: 'Processing spend...' })
-                try {
-                  const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
-                  const kit = new AppKit()
-                  const result = await kit.unifiedBalance.spend({
-                    amount: spendAmount,
-                    from: { adapter, allocations: { amount: spendAmount, chain: spendChain } },
-                    to: { adapter, chain: spendTo, recipientAddress: spendRecipient },
-                    token: 'USDC',
-                  })
-                  setUnifiedStatus({ type: 'success', msg: 'Spend successful! TX: ' + (result?.txHash || result?.transactionHash || '').slice(0,20) + '...' })
-                } catch(e) { setUnifiedStatus({ type: 'error', msg: e?.message || 'Spend failed.' }) }
-                setLoading(false)
-              }}>
-                {loading ? 'Processing...' : account ? 'Spend USDC' : 'Connect wallet first'}
-              </button>
-
-              {unifiedBalances && (
-                <div style={styles.resultBox}>
-                  <div style={{ fontSize: '12px', color: 'rgba(196,158,71,0.8)', fontWeight: '600', marginBottom: '10px', textTransform: 'uppercase' }}>
-                    Gateway Balance — {unifiedBalances.token}
-                  </div>
-                  <div style={styles.infoRow}>
-                    <span>Total Confirmed</span>
-                    <span style={styles.infoVal}>{unifiedBalances.totalConfirmedBalance} USDC</span>
-                  </div>
-                  <div style={styles.infoRow}>
-                    <span>Total Pending</span>
-                    <span style={styles.infoVal}>{unifiedBalances.totalPendingBalance} USDC</span>
-                  </div>
-                  <div style={styles.divider} />
-                  {unifiedBalances.breakdown?.[0]?.breakdown?.map(b => (
-                    <div key={b.chain} style={styles.infoRow}>
-                      <span style={{ fontSize: '12px' }}>{b.chain.replace(/_/g, ' ')}</span>
-                      <span style={styles.infoVal}>{b.confirmedBalance} USDC</span>
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '1.5rem' }}>
+                {['deposit', 'balances', 'spend'].map(t => (
+                  <button key={t} onClick={() => { setUnifiedSubTab(t); setUnifiedStatus(null) }} style={{ flex: 1, padding: '8px', borderRadius: '12px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', border: unifiedSubTab === t ? 'none' : '1px solid rgba(196,158,71,0.25)', background: unifiedSubTab === t ? 'linear-gradient(135deg, #c49e47, #e8c97a)' : 'transparent', color: unifiedSubTab === t ? '#0a0e1a' : 'rgba(196,158,71,0.7)' }}>
+                    {t === 'deposit' ? 'Deposit' : t === 'balances' ? 'Balances' : 'Spend'}
+                  </button>
+                ))}
+              </div>
+              {unifiedSubTab === 'deposit' && (
+                <>
+                  <div style={styles.label}>Source Chain</div>
+                  <select style={styles.select} value={spendChain} onChange={e => setSpendChain(e.target.value)}>
+                    <option value="Arc_Testnet">Arc Testnet</option>
+                    <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
+                    <option value="Base_Sepolia">Base Sepolia</option>
+                    <option value="Avalanche_Fuji">Avalanche Fuji</option>
+                  </select>
+                  <div style={styles.label}>Amount (USDC)</div>
+                  <input style={styles.input} type="number" placeholder="0.00" value={spendAmount} onChange={e => setSpendAmount(e.target.value)} />
+                  <button style={styles.btn(!account || !spendAmount || loading)} disabled={!account || !spendAmount || loading} onClick={handleDeposit}>
+                    {loading ? 'Depositing...' : account ? 'Deposit to Gateway' : 'Connect wallet first'}
+                  </button>
+                  {unifiedStatus && <div style={styles.statusBox(unifiedStatus.type)}>{unifiedStatus.msg}</div>}
+                </>
+              )}
+              {unifiedSubTab === 'balances' && (
+                <>
+                  <button style={styles.btn(!account || loading)} disabled={!account || loading} onClick={handleGetBalances}>
+                    {loading ? 'Loading...' : account ? 'Get Gateway Balances' : 'Connect wallet first'}
+                  </button>
+                  {unifiedStatus && <div style={styles.statusBox(unifiedStatus.type)}>{unifiedStatus.msg}</div>}
+                  {unifiedBalances && (
+                    <div style={styles.resultBox}>
+                      <div style={{ fontSize: '12px', color: 'rgba(196,158,71,0.8)', fontWeight: '600', marginBottom: '10px', textTransform: 'uppercase' }}>Gateway Balance</div>
+                      <div style={styles.infoRow}><span>Total</span><span style={styles.infoVal}>{unifiedBalances.totalConfirmedBalance} USDC</span></div>
+                      <div style={styles.infoRow}><span>Pending</span><span style={styles.infoVal}>{unifiedBalances.totalPendingBalance} USDC</span></div>
+                      <div style={styles.divider} />
+                      {unifiedBalances.breakdown?.[0]?.breakdown?.filter(b => parseFloat(b.confirmedBalance) > 0 || parseFloat(b.pendingBalance) > 0).map(b => (
+                        <div key={b.chain} style={styles.infoRow}>
+                          <span style={{ fontSize: '12px' }}>{b.chain.replace(/_/g, ' ')}</span>
+                          <span style={styles.infoVal}>{b.confirmedBalance} USDC</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
+              )}
+              {unifiedSubTab === 'spend' && (
+                <>
+                  <div style={styles.label}>Source Chain (Gateway)</div>
+                  <select style={styles.select} value={spendChain} onChange={e => setSpendChain(e.target.value)}>
+                    <option value="Arc_Testnet">Arc Testnet</option>
+                    <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
+                    <option value="Base_Sepolia">Base Sepolia</option>
+                    <option value="Avalanche_Fuji">Avalanche Fuji</option>
+                  </select>
+                  <div style={styles.label}>Destination Chain</div>
+                  <select style={styles.select} value={spendTo} onChange={e => setSpendTo(e.target.value)}>
+                    <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
+                    <option value="Arc_Testnet">Arc Testnet</option>
+                    <option value="Base_Sepolia">Base Sepolia</option>
+                    <option value="Avalanche_Fuji">Avalanche Fuji</option>
+                  </select>
+                  <div style={styles.label}>Recipient Address</div>
+                  <input style={styles.input} placeholder="0x..." value={spendRecipient} onChange={e => setSpendRecipient(e.target.value)} />
+                  <div style={styles.label}>Amount (USDC)</div>
+                  <input style={styles.input} type="number" placeholder="0.00" value={spendAmount} onChange={e => setSpendAmount(e.target.value)} />
+                  <button style={styles.btn(!account || !spendRecipient || !spendAmount || loading)} disabled={!account || !spendRecipient || !spendAmount || loading} onClick={handleSpend}>
+                    {loading ? 'Processing...' : account ? 'Spend USDC' : 'Connect wallet first'}
+                  </button>
+                  {unifiedStatus && <div style={styles.statusBox(unifiedStatus.type)}>{unifiedStatus.msg}</div>}
+                </>
               )}
             </>
           )}
