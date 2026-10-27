@@ -15,10 +15,17 @@ const ARC_TESTNET = {
 const SEPOLIA = {
   id: 11155111,
   name: 'Ethereum Sepolia',
-  name: 'Ethereum Sepolia',
   nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
   rpcUrls: { default: { http: ['https://ethereum-sepolia-rpc.publicnode.com'] } },
   blockExplorers: { default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' } },
+}
+
+const ARBITRUM_SEPOLIA = {
+  id: 421614,
+  name: 'Arbitrum Sepolia',
+  nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+  rpcUrls: { default: { http: ['https://sepolia-rollup.arbitrum.io/rpc'] } },
+  blockExplorers: { default: { name: 'Arbiscan', url: 'https://sepolia.arbiscan.io' } },
 }
 
 const TOKENS = {
@@ -32,10 +39,21 @@ const TOKENS = {
   avalanche: [
     { symbol: 'USDC', address: '0x5425890298aed601595a70AB815c96711a31Bc65', decimals: 6 },
   ],
+  arbitrum: [
+    { symbol: 'USDC', address: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d', decimals: 6 },
+  ],
   sepolia: [
     { symbol: 'USDC', address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', decimals: 6 },
     { symbol: 'EURC', address: '0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4', decimals: 6 },
   ],
+}
+
+const NET_KEY = {
+  Arc_Testnet: 'arc',
+  Ethereum_Sepolia: 'sepolia',
+  Base_Sepolia: 'base',
+  Avalanche_Fuji: 'avalanche',
+  Arbitrum_Sepolia: 'arbitrum',
 }
 
 const ERC20_ABI = [
@@ -78,6 +96,15 @@ const styles = {
   resultVal: { color: '#e8e0cc', wordBreak: 'break-all', textAlign: 'right' },
   infoCard: { background: 'rgba(196,158,71,0.06)', border: '1px solid rgba(196,158,71,0.15)', borderRadius: '12px', padding: '14px', marginBottom: '1rem' },
 }
+
+const CHAIN_OPTIONS = [
+  ['Ethereum_Sepolia', 'Ethereum Sepolia'],
+  ['Arc_Testnet', 'Arc Testnet'],
+  ['Base_Sepolia', 'Base Sepolia'],
+  ['Avalanche_Fuji', 'Avalanche Fuji'],
+  ['Arbitrum_Sepolia', 'Arbitrum Sepolia'],
+]
+
 export default function App() {
   const [tab, setTab] = useState('bridge')
   const [account, setAccount] = useState(null)
@@ -112,8 +139,8 @@ export default function App() {
   }, [])
 
   const AVALANCHE_FUJI = { id: 43113, name: 'Avalanche Fuji', nativeCurrency: { name: 'AVAX', symbol: 'AVAX', decimals: 18 }, rpcUrls: { default: { http: ['https://api.avax-test.network/ext/bc/C/rpc'] } }, blockExplorers: { default: { name: 'SnowTrace', url: 'https://testnet.snowtrace.io' } } }
-  const getChainConfig = (net) => net === 'arc' ? ARC_TESTNET : net === 'base' ? { id: 84532, name: 'Base Sepolia', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: ['https://sepolia.base.org'] } }, blockExplorers: { default: { name: 'BaseScan', url: 'https://sepolia.basescan.org' } } } : net === 'avalanche' ? AVALANCHE_FUJI : SEPOLIA
-  const getExplorerUrl = (net) => net === 'arc' ? 'https://testnet.arcscan.app' : net === 'base' ? 'https://sepolia.basescan.org' : net === 'avalanche' ? 'https://testnet.snowtrace.io' : 'https://sepolia.etherscan.io'
+  const getChainConfig = (net) => net === 'arbitrum' ? ARBITRUM_SEPOLIA : net === 'arc' ? ARC_TESTNET : net === 'base' ? { id: 84532, name: 'Base Sepolia', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: ['https://sepolia.base.org'] } }, blockExplorers: { default: { name: 'BaseScan', url: 'https://sepolia.basescan.org' } } } : net === 'avalanche' ? AVALANCHE_FUJI : SEPOLIA
+  const getExplorerUrl = (net) => net === 'arbitrum' ? 'https://sepolia.arbiscan.io' : net === 'arc' ? 'https://testnet.arcscan.app' : net === 'base' ? 'https://sepolia.basescan.org' : net === 'avalanche' ? 'https://testnet.snowtrace.io' : 'https://sepolia.etherscan.io'
 
   async function fetchWalletBalance(addr, network) {
     try {
@@ -130,7 +157,23 @@ export default function App() {
     if (currentChainId === targetChainId) return
     try {
       await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: targetChainId }] })
-    } catch (e) { }
+    } catch (e) {
+      // Ağ cüzdanda kayıtlı değilse ekle
+      if (e?.code === 4902) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: targetChainId,
+              chainName: chain.name,
+              nativeCurrency: chain.nativeCurrency,
+              rpcUrls: chain.rpcUrls.default.http,
+              blockExplorerUrls: [chain.blockExplorers.default.url],
+            }],
+          })
+        } catch { }
+      }
+    }
     const finalChainId = await window.ethereum.request({ method: 'eth_chainId' })
     const net = finalChainId === '0x4cef52' ? 'arc' : 'sepolia'
     if (account) fetchWalletBalance(account, net)
@@ -190,7 +233,6 @@ export default function App() {
 
       const isContract = code && code !== '0x' && code.length > 2
       const isArc = lookupNetwork === 'arc'
-      const nativeSymbol = lookupNetwork === 'avalanche' ? 'AVAX' : lookupNetwork === 'arc' ? 'USDC' : 'ETH'
       const nativeLabel = isArc ? 'USDC (native)' : lookupNetwork === 'avalanche' ? 'AVAX' : 'ETH'
       const nativeFormatted = parseFloat(formatEther(nativeBalance)).toFixed(4)
       const tokenResults = tokens.map((t, i) => ({ symbol: t.symbol, balance: (Number(tokenBalances[i]) / 10 ** t.decimals).toFixed(4) }))
@@ -236,7 +278,7 @@ export default function App() {
     if (!account || !spendAmount) return
     setLoading(true); setUnifiedStatus({ type: 'info', msg: 'Depositing...' })
     try {
-      const dc = spendChain === 'Arc_Testnet' ? ARC_TESTNET : SEPOLIA
+      const dc = getChainConfig(NET_KEY[spendChain])
       await switchNetwork(dc)
       const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
       const kit = new AppKit()
@@ -270,6 +312,8 @@ export default function App() {
   }
 
   const TAB_LABELS = { bridge: 'Bridge', unified: 'Unified Balance', lookup: 'Address Lookup', faucet: 'Faucet', about: 'What is Arc?' }
+  const chainOptions = CHAIN_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)
+
 return (
     <div style={styles.app}>
       <nav style={styles.nav}>
@@ -306,18 +350,12 @@ return (
               <div style={styles.cardSub}>Transfer USDC across chains via Circle CCTP protocol</div>
               <div style={styles.label}>From</div>
               <select style={styles.select} value={fromChain} onChange={e => { setFromChain(e.target.value); if (e.target.value === toChain) setToChain(e.target.value === 'Arc_Testnet' ? 'Ethereum_Sepolia' : 'Arc_Testnet') }}>
-                <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
-                <option value="Arc_Testnet">Arc Testnet</option>
-                <option value="Base_Sepolia">Base Sepolia</option>
-                <option value="Avalanche_Fuji">Avalanche Fuji</option>
+                {chainOptions}
               </select>
               <div style={styles.arrow}><button onClick={() => { const tmp = fromChain; setFromChain(toChain); setToChain(tmp) }} style={{ background: 'none', border: '1px solid rgba(196,158,71,0.3)', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', color: '#c49e47', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>↕</button></div>
               <div style={styles.label}>To</div>
               <select style={styles.select} value={toChain} onChange={e => setToChain(e.target.value)}>
-                <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
-                <option value="Arc_Testnet">Arc Testnet</option>
-                <option value="Base_Sepolia">Base Sepolia</option>
-                <option value="Avalanche_Fuji">Avalanche Fuji</option>
+                {chainOptions}
               </select>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                 <div style={styles.label}>Amount (USDC)</div>
@@ -351,10 +389,7 @@ return (
                 <>
                   <div style={styles.label}>Source Chain</div>
                   <select style={styles.select} value={spendChain} onChange={e => setSpendChain(e.target.value)}>
-                    <option value="Arc_Testnet">Arc Testnet</option>
-                    <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
-                    <option value="Base_Sepolia">Base Sepolia</option>
-                    <option value="Avalanche_Fuji">Avalanche Fuji</option>
+                    {chainOptions}
                   </select>
                   <div style={styles.label}>Amount (USDC)</div>
                   <input style={styles.input} type="number" placeholder="0.00" value={spendAmount} onChange={e => setSpendAmount(e.target.value)} />
@@ -390,17 +425,11 @@ return (
                 <>
                   <div style={styles.label}>Source Chain (Gateway)</div>
                   <select style={styles.select} value={spendChain} onChange={e => setSpendChain(e.target.value)}>
-                    <option value="Arc_Testnet">Arc Testnet</option>
-                    <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
-                    <option value="Base_Sepolia">Base Sepolia</option>
-                    <option value="Avalanche_Fuji">Avalanche Fuji</option>
+                    {chainOptions}
                   </select>
                   <div style={styles.label}>Destination Chain</div>
                   <select style={styles.select} value={spendTo} onChange={e => setSpendTo(e.target.value)}>
-                    <option value="Ethereum_Sepolia">Ethereum Sepolia</option>
-                    <option value="Arc_Testnet">Arc Testnet</option>
-                    <option value="Base_Sepolia">Base Sepolia</option>
-                    <option value="Avalanche_Fuji">Avalanche Fuji</option>
+                    {chainOptions}
                   </select>
                   <div style={styles.label}>Recipient Address</div>
                   <input style={styles.input} placeholder="0x..." value={spendRecipient} onChange={e => setSpendRecipient(e.target.value)} />
@@ -425,6 +454,7 @@ return (
                 <option value="sepolia">Ethereum Sepolia</option>
                 <option value="base">Base Sepolia</option>
                 <option value="avalanche">Avalanche Fuji</option>
+                <option value="arbitrum">Arbitrum Sepolia</option>
               </select>
               <div style={styles.label}>Address</div>
               <input style={styles.input} placeholder="e.g. 0xACD46e5c...FD757107" value={lookupAddress} onChange={e => setLookupAddress(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLookup()} />
