@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { createWalletClient, createPublicClient, custom, http, formatEther, parseUnits } from 'viem'
+import { createWalletClient, createPublicClient, custom, http, fallback, formatEther, parseUnits } from 'viem'
 import { AppKit } from '@circle-fin/app-kit'
 import { UnifiedBalanceKit } from '@circle-fin/unified-balance-kit'
 import { createViemAdapterFromProvider } from '@circle-fin/adapter-viem-v2'
@@ -16,16 +16,53 @@ const SEPOLIA = {
   id: 11155111,
   name: 'Ethereum Sepolia',
   nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-  rpcUrls: { default: { http: ['https://ethereum-sepolia-rpc.publicnode.com'] } },
+  rpcUrls: { default: { http: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.gateway.tenderly.co'] } },
   blockExplorers: { default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' } },
+}
+
+const BASE_SEPOLIA = {
+  id: 84532,
+  name: 'Base Sepolia',
+  nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+  rpcUrls: { default: { http: ['https://sepolia.base.org', 'https://base-sepolia-rpc.publicnode.com'] } },
+  blockExplorers: { default: { name: 'BaseScan', url: 'https://sepolia.basescan.org' } },
+}
+
+const AVALANCHE_FUJI = {
+  id: 43113,
+  name: 'Avalanche Fuji',
+  nativeCurrency: { name: 'AVAX', symbol: 'AVAX', decimals: 18 },
+  rpcUrls: { default: { http: ['https://api.avax-test.network/ext/bc/C/rpc', 'https://avalanche-fuji-c-chain-rpc.publicnode.com'] } },
+  blockExplorers: { default: { name: 'SnowTrace', url: 'https://testnet.snowtrace.io' } },
 }
 
 const ARBITRUM_SEPOLIA = {
   id: 421614,
   name: 'Arbitrum Sepolia',
   nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-  rpcUrls: { default: { http: ['https://sepolia-rollup.arbitrum.io/rpc'] } },
+  rpcUrls: { default: { http: ['https://sepolia-rollup.arbitrum.io/rpc', 'https://arbitrum-sepolia-rpc.publicnode.com'] } },
   blockExplorers: { default: { name: 'Arbiscan', url: 'https://sepolia.arbiscan.io' } },
+}
+
+const ALL_CHAINS = [ARC_TESTNET, SEPOLIA, BASE_SEPOLIA, AVALANCHE_FUJI, ARBITRUM_SEPOLIA]
+
+// Circle SDK'nın kendi varsayılan RPC'leri yerine bizim RPC'lerimizi kullanması için
+const publicClientCache = {}
+function getPublicClientForChain({ chain }) {
+  const id = Number(chain?.chainId ?? chain?.id)
+  const viemChain = ALL_CHAINS.find(c => c.id === id) || ALL_CHAINS.find(c => c.name === chain?.name)
+  if (!viemChain) throw new Error(`No RPC configured for chain: ${chain?.name || id}`)
+  if (!publicClientCache[viemChain.id]) {
+    publicClientCache[viemChain.id] = createPublicClient({
+      chain: viemChain,
+      transport: fallback(viemChain.rpcUrls.default.http.map(url => http(url))),
+    })
+  }
+  return publicClientCache[viemChain.id]
+}
+
+function makeAdapter() {
+  return createViemAdapterFromProvider({ provider: window.ethereum, getPublicClient: getPublicClientForChain })
 }
 
 const TOKENS = {
@@ -138,9 +175,8 @@ export default function App() {
     }
   }, [])
 
-  const AVALANCHE_FUJI = { id: 43113, name: 'Avalanche Fuji', nativeCurrency: { name: 'AVAX', symbol: 'AVAX', decimals: 18 }, rpcUrls: { default: { http: ['https://api.avax-test.network/ext/bc/C/rpc'] } }, blockExplorers: { default: { name: 'SnowTrace', url: 'https://testnet.snowtrace.io' } } }
-  const getChainConfig = (net) => net === 'arbitrum' ? ARBITRUM_SEPOLIA : net === 'arc' ? ARC_TESTNET : net === 'base' ? { id: 84532, name: 'Base Sepolia', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: ['https://sepolia.base.org'] } }, blockExplorers: { default: { name: 'BaseScan', url: 'https://sepolia.basescan.org' } } } : net === 'avalanche' ? AVALANCHE_FUJI : SEPOLIA
-  const getExplorerUrl = (net) => net === 'arbitrum' ? 'https://sepolia.arbiscan.io' : net === 'arc' ? 'https://testnet.arcscan.app' : net === 'base' ? 'https://sepolia.basescan.org' : net === 'avalanche' ? 'https://testnet.snowtrace.io' : 'https://sepolia.etherscan.io'
+  const getChainConfig = (net) => net === 'arbitrum' ? ARBITRUM_SEPOLIA : net === 'arc' ? ARC_TESTNET : net === 'base' ? BASE_SEPOLIA : net === 'avalanche' ? AVALANCHE_FUJI : SEPOLIA
+  const getExplorerUrl = (net) => getChainConfig(net).blockExplorers.default.url
 
   async function fetchWalletBalance(addr, network) {
     try {
@@ -201,7 +237,8 @@ export default function App() {
     setLoading(true)
     setBridgeStatus({ type: 'info', msg: 'Preparing bridge...' })
     try {
-      const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
+      await switchNetwork(getChainConfig(NET_KEY[fromChain]))
+      const adapter = await makeAdapter()
       const kit = new AppKit()
       setBridgeStatus({ type: 'info', msg: 'Confirm in your wallet...' })
       const result = await kit.bridge({ from: { adapter, chain: fromChain }, to: { adapter, chain: toChain }, amount, token: bridgeToken })
@@ -220,7 +257,7 @@ export default function App() {
     setLookupResult(null)
     try {
       const chain = getChainConfig(lookupNetwork)
-      const publicClient = createPublicClient({ chain, transport: http(chain.rpcUrls.default.http[0]) })
+      const publicClient = getPublicClientForChain({ chain })
       const addr = lookupAddress.trim()
       const tokens = TOKENS[lookupNetwork]
 
@@ -280,7 +317,7 @@ export default function App() {
     try {
       const dc = getChainConfig(NET_KEY[spendChain])
       await switchNetwork(dc)
-      const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
+      const adapter = await makeAdapter()
       const kit = new AppKit()
       const r = await kit.unifiedBalance.deposit({ from: { adapter, chain: spendChain }, amount: spendAmount, token: 'USDC' })
       setUnifiedStatus({ type: 'success', msg: 'Deposit OK! TX: ' + (r?.txHash || r?.transactionHash || '').slice(0,20) + '...' })
@@ -303,7 +340,7 @@ export default function App() {
     if (!account || !spendRecipient || !spendAmount) return
     setLoading(true); setUnifiedStatus({ type: 'info', msg: 'Processing spend...' })
     try {
-      const adapter = await createViemAdapterFromProvider({ provider: window.ethereum })
+      const adapter = await makeAdapter()
       const kit = new AppKit()
       const r = await kit.unifiedBalance.spend({ amount: spendAmount, from: { adapter, allocations: { amount: spendAmount, chain: spendChain } }, to: { adapter, chain: spendTo, recipientAddress: spendRecipient }, token: 'USDC' })
       setUnifiedStatus({ type: 'success', msg: 'Spend OK! TX: ' + (r?.txHash || r?.transactionHash || '').slice(0,20) + '...' })
