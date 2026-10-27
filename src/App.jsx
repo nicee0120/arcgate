@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
-import { createWalletClient, createPublicClient, custom, http, fallback, formatEther, parseUnits } from 'viem'
+import { createWalletClient, createPublicClient, custom, http, fallback, formatEther } from 'viem'
 import { AppKit } from '@circle-fin/app-kit'
-import { UnifiedBalanceKit } from '@circle-fin/unified-balance-kit'
 import { createViemAdapterFromProvider } from '@circle-fin/adapter-viem-v2'
 
 const ARC_TESTNET = {
@@ -65,6 +64,14 @@ function makeAdapter() {
   return createViemAdapterFromProvider({ provider: window.ethereum, getPublicClient: getPublicClientForChain })
 }
 
+// CCTP V2 (testnet) — takılan transferleri elle tamamlamak için
+const CCTP_DOMAINS = { sepolia: 0, avalanche: 1, arbitrum: 3, base: 6, arc: 26 }
+const MESSAGE_TRANSMITTER_V2 = '0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275'
+const IRIS_SANDBOX = 'https://iris-api-sandbox.circle.com'
+const MESSAGE_TRANSMITTER_ABI = [
+  { name: 'receiveMessage', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'message', type: 'bytes' }, { name: 'attestation', type: 'bytes' }], outputs: [{ type: 'bool' }] },
+]
+
 const TOKENS = {
   arc: [
     { symbol: 'USDC', address: '0x3600000000000000000000000000000000000000', decimals: 6 },
@@ -99,6 +106,10 @@ const ERC20_ABI = [
   { name: 'decimals', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
   { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
 ]
+
+const getChainConfig = (net) => net === 'arbitrum' ? ARBITRUM_SEPOLIA : net === 'arc' ? ARC_TESTNET : net === 'base' ? BASE_SEPOLIA : net === 'avalanche' ? AVALANCHE_FUJI : SEPOLIA
+const getExplorerUrl = (net) => getChainConfig(net).blockExplorers.default.url
+
 const styles = {
   app: { minHeight: '100vh', background: 'linear-gradient(135deg, #0a0e1a 0%, #0d1229 50%, #0a0e1a 100%)', display: 'flex', flexDirection: 'column' },
   nav: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 2rem', borderBottom: '1px solid rgba(196, 158, 71, 0.15)', backdropFilter: 'blur(10px)', position: 'sticky', top: 0, zIndex: 100, background: 'rgba(10, 14, 26, 0.85)' },
@@ -123,7 +134,7 @@ const styles = {
   arrow: { display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0.5rem 0', color: '#c49e47', fontSize: '20px' },
   btn: (disabled) => ({ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', background: disabled ? 'rgba(196, 158, 71, 0.2)' : 'linear-gradient(135deg, #c49e47, #e8c97a)', color: disabled ? 'rgba(196, 158, 71, 0.4)' : '#0a0e1a', fontSize: '15px', fontWeight: '700', cursor: disabled ? 'not-allowed' : 'pointer', transition: 'all 0.2s', marginTop: '0.5rem' }),
   statusBox: (type) => ({ padding: '12px 16px', borderRadius: '10px', fontSize: '13px', marginTop: '1rem', background: type === 'success' ? 'rgba(196, 158, 71, 0.1)' : type === 'error' ? 'rgba(220, 38, 38, 0.1)' : 'rgba(255,255,255,0.05)', border: `1px solid ${type === 'success' ? 'rgba(196,158,71,0.3)' : type === 'error' ? 'rgba(220,38,38,0.3)' : 'rgba(255,255,255,0.1)'}`, color: type === 'success' ? '#e8c97a' : type === 'error' ? '#f87171' : 'rgba(232,224,204,0.7)', lineHeight: '1.5', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }),
-  faucetBtn: { display: 'block', width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid rgba(196, 158, 71, 0.4)', background: 'transparent', color: '#c49e47', fontSize: '15px', fontWeight: '600', cursor: 'pointer', textAlign: 'center', textDecoration: 'none', marginTop: '1rem', transition: 'all 0.2s' },
+  faucetBtn: { display: 'block', width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid rgba(196, 158, 71, 0.4)', background: 'transparent', color: '#c49e47', fontSize: '15px', fontWeight: '600', cursor: 'pointer', textAlign: 'center', textDecoration: 'none', marginTop: '1rem', transition: 'all 0.2s', boxSizing: 'border-box' },
   divider: { height: '1px', background: 'rgba(196, 158, 71, 0.15)', margin: '1.5rem 0' },
   infoRow: { display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'rgba(232, 224, 204, 0.5)', marginBottom: '6px' },
   infoVal: { color: '#e8e0cc' },
@@ -142,6 +153,8 @@ const CHAIN_OPTIONS = [
   ['Arbitrum_Sepolia', 'Arbitrum Sepolia'],
 ]
 
+const stepTxHash = (s) => s?.txHash || s?.data?.txHash || s?.transactionHash || ''
+
 export default function App() {
   const [tab, setTab] = useState('bridge')
   const [account, setAccount] = useState(null)
@@ -150,9 +163,13 @@ export default function App() {
 
   const [amount, setAmount] = useState('')
   const [bridgeStatus, setBridgeStatus] = useState(null)
-  const [bridgeToken, setBridgeToken] = useState('USDC')
   const [fromChain, setFromChain] = useState('Ethereum_Sepolia')
   const [toChain, setToChain] = useState('Arc_Testnet')
+  const [failedBridge, setFailedBridge] = useState(null) // { result, to }
+
+  const [recoverChain, setRecoverChain] = useState('Ethereum_Sepolia')
+  const [recoverHash, setRecoverHash] = useState('')
+  const [recoverStatus, setRecoverStatus] = useState(null)
 
   const [unifiedBalances, setUnifiedBalances] = useState(null)
   const [unifiedStatus, setUnifiedStatus] = useState(null)
@@ -175,15 +192,14 @@ export default function App() {
     }
   }, [])
 
-  const getChainConfig = (net) => net === 'arbitrum' ? ARBITRUM_SEPOLIA : net === 'arc' ? ARC_TESTNET : net === 'base' ? BASE_SEPOLIA : net === 'avalanche' ? AVALANCHE_FUJI : SEPOLIA
-  const getExplorerUrl = (net) => getChainConfig(net).blockExplorers.default.url
-
   async function fetchWalletBalance(addr, network) {
     try {
-      const chain = network === "arc" ? ARC_TESTNET : SEPOLIA
-      const pub = createPublicClient({ chain, transport: http(chain.rpcUrls.default.http[0]) })
-      const bal = await pub.readContract({ address: "0x3600000000000000000000000000000000000000", abi: ERC20_ABI, functionName: "balanceOf", args: [addr] })
-      setWalletBalance((Number(bal) / 1e6).toFixed(2) + " USDC")
+      const chain = getChainConfig(network)
+      const token = TOKENS[network]?.find(t => t.symbol === 'USDC')
+      if (!token) { setWalletBalance(null); return }
+      const pub = getPublicClientForChain({ chain })
+      const bal = await pub.readContract({ address: token.address, abi: ERC20_ABI, functionName: "balanceOf", args: [addr] })
+      setWalletBalance((Number(bal) / 1e6).toFixed(2))
     } catch { setWalletBalance(null) }
   }
 
@@ -211,11 +227,11 @@ export default function App() {
       }
     }
     const finalChainId = await window.ethereum.request({ method: 'eth_chainId' })
-    const net = finalChainId === '0x4cef52' ? 'arc' : 'sepolia'
-    if (account) fetchWalletBalance(account, net)
     if (finalChainId !== targetChainId) {
       throw new Error(`Please switch to ${chain.name} in your wallet and try again.`)
     }
+    const netKey = Object.keys(CCTP_DOMAINS).find(k => getChainConfig(k).id === chain.id)
+    if (account && netKey) fetchWalletBalance(account, netKey)
   }
 
   async function connectWallet() {
@@ -223,29 +239,136 @@ export default function App() {
     try {
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
       setAccount(accounts[0]); localStorage.setItem("arcgate_wallet", accounts[0])
-      // Fetch USDC balance
-      try {
-        const pub = createPublicClient({ chain: ARC_TESTNET, transport: http(ARC_TESTNET.rpcUrls.default.http[0]) })
-        const bal = await pub.readContract({ address: '0x3600000000000000000000000000000000000000', abi: ERC20_ABI, functionName: 'balanceOf', args: [accounts[0]] })
-        setWalletBalance((Number(bal) / 1e6).toFixed(2))
-      } catch {}
+      fetchWalletBalance(accounts[0], 'arc')
     } catch { alert('Connection cancelled.') }
+  }
+
+  function describeBridgeResult(result) {
+    const steps = result?.steps || []
+    const failed = steps.find(s => s.state === 'error')
+    const burn = steps.find(s => s.name === 'burn')
+    const burnHash = stepTxHash(burn)
+    let msg = `Bridge did not finish${failed ? ` (failed at: ${failed.name})` : ''}.`
+    if (failed?.error) msg += `\n${failed.error?.message || failed.error}`
+    if (burn?.state === 'success') {
+      msg += `\n\nYour USDC was already sent from the source chain. It is not lost — press "Retry" below to finish the transfer.`
+      if (burnHash) msg += `\nBurn TX: ${burnHash}`
+    }
+    return msg
   }
 
   async function handleBridge() {
     if (!account || !amount) return
     setLoading(true)
+    setFailedBridge(null)
     setBridgeStatus({ type: 'info', msg: 'Preparing bridge...' })
     try {
       await switchNetwork(getChainConfig(NET_KEY[fromChain]))
       const adapter = await makeAdapter()
       const kit = new AppKit()
       setBridgeStatus({ type: 'info', msg: 'Confirm in your wallet...' })
-      const result = await kit.bridge({ from: { adapter, chain: fromChain }, to: { adapter, chain: toChain }, amount, token: bridgeToken })
-      const hash = result?.transactionHash || result?.txHash || ''
-      setBridgeStatus({ type: 'success', msg: `Bridge successful!\nTX: ${hash.slice(0, 20)}...` })
+      const result = await kit.bridge({ from: { adapter, chain: fromChain }, to: { adapter, chain: toChain }, amount, token: 'USDC' })
+      if (result?.state === 'success') {
+        const mintHash = stepTxHash(result.steps?.find(s => s.name === 'mint'))
+        setBridgeStatus({ type: 'success', msg: `Bridge successful!${mintHash ? `\nMint TX: ${mintHash}` : ''}` })
+      } else {
+        setFailedBridge({ result, to: toChain })
+        setBridgeStatus({ type: 'error', msg: describeBridgeResult(result) })
+      }
     } catch (e) {
       setBridgeStatus({ type: 'error', msg: e?.message || 'Bridge failed.' })
+    }
+    setLoading(false)
+  }
+
+  async function handleRetryBridge() {
+    if (!failedBridge) return
+    setLoading(true)
+    setBridgeStatus({ type: 'info', msg: 'Retrying... confirm in your wallet.' })
+    try {
+      await switchNetwork(getChainConfig(NET_KEY[failedBridge.to]))
+      const adapter = await makeAdapter()
+      const kit = new AppKit()
+      const r = await kit.retry(failedBridge.result, { from: adapter, to: adapter })
+      if (r?.state === 'success') {
+        const mintHash = stepTxHash(r.steps?.find(s => s.name === 'mint'))
+        setFailedBridge(null)
+        setBridgeStatus({ type: 'success', msg: `Bridge completed!${mintHash ? `\nMint TX: ${mintHash}` : ''}` })
+      } else {
+        setFailedBridge({ result: r, to: failedBridge.to })
+        setBridgeStatus({ type: 'error', msg: describeBridgeResult(r) + '\n\nIf this keeps failing, use "Finish a stuck transfer" below with the Burn TX.' })
+      }
+    } catch (e) {
+      setBridgeStatus({ type: 'error', msg: (e?.message || 'Retry failed.') + '\n\nYou can also use "Finish a stuck transfer" below with the Burn TX.' })
+    }
+    setLoading(false)
+  }
+
+  // Burn işlemi yapılmış ama mint olmamış transferi, burn TX hash'i ile tamamlar
+  async function handleRecover() {
+    const hash = recoverHash.trim()
+    if (!account || !hash) return
+    setLoading(true)
+    setRecoverStatus({ type: 'info', msg: 'Checking the transfer with Circle...' })
+    try {
+      const srcDomain = CCTP_DOMAINS[NET_KEY[recoverChain]]
+      const res = await fetch(`${IRIS_SANDBOX}/v2/messages/${srcDomain}?transactionHash=${hash}`)
+      if (res.status === 404) throw new Error('No bridge transfer found for this transaction. Check that the source chain and TX hash are correct, or wait a few minutes and try again.')
+      if (!res.ok) throw new Error(`Circle API error (${res.status}). Try again in a minute.`)
+      const data = await res.json()
+      const msg = data?.messages?.[0]
+      if (!msg) throw new Error('No bridge transfer found for this transaction.')
+      if (msg.status !== 'complete' || !msg.attestation || msg.attestation === 'PENDING') {
+        setRecoverStatus({ type: 'info', msg: 'Circle has not approved this transfer yet. This can take up to 15-20 minutes from Ethereum. Try again shortly.' })
+        setLoading(false)
+        return
+      }
+      const destDomain = Number(msg.decodedMessage?.destinationDomain)
+      const destKey = Object.keys(CCTP_DOMAINS).find(k => CCTP_DOMAINS[k] === destDomain)
+      if (!destKey) throw new Error(`This transfer goes to a chain ArcGate does not support (domain ${destDomain}).`)
+      const destChain = getChainConfig(destKey)
+
+      await switchNetwork(destChain)
+      const pub = getPublicClientForChain({ chain: destChain })
+
+      // Önce simüle et: mint zaten yapıldıysa burada anlarız
+      try {
+        await pub.simulateContract({ address: MESSAGE_TRANSMITTER_V2, abi: MESSAGE_TRANSMITTER_ABI, functionName: 'receiveMessage', args: [msg.message, msg.attestation], account })
+      } catch (e) {
+        const text = `${e?.shortMessage || ''} ${e?.message || ''}`
+        if (/nonce already used/i.test(text)) {
+          setRecoverStatus({ type: 'success', msg: `This transfer is already complete. Your USDC should be on ${destChain.name}.` })
+          setLoading(false)
+          return
+        }
+        throw e
+      }
+
+      // Taban ücretin üzerinde bol pay bırak (max fee < base fee hatasını önler)
+      const block = await pub.getBlock()
+      const fees = await pub.estimateFeesPerGas().catch(() => ({}))
+      const priority = fees.maxPriorityFeePerGas ?? 0n
+      const base = block.baseFeePerGas ?? fees.maxFeePerGas ?? 0n
+      const maxFeePerGas = base * 3n + priority
+
+      const wallet = createWalletClient({ account, chain: destChain, transport: custom(window.ethereum) })
+      setRecoverStatus({ type: 'info', msg: `Confirm the mint on ${destChain.name} in your wallet...` })
+      const txHash = await wallet.writeContract({
+        address: MESSAGE_TRANSMITTER_V2,
+        abi: MESSAGE_TRANSMITTER_ABI,
+        functionName: 'receiveMessage',
+        args: [msg.message, msg.attestation],
+        maxFeePerGas,
+        maxPriorityFeePerGas: priority,
+      })
+      setRecoverStatus({ type: 'info', msg: 'Waiting for confirmation...' })
+      const receipt = await pub.waitForTransactionReceipt({ hash: txHash })
+      if (receipt.status !== 'success') throw new Error(`Mint transaction failed. TX: ${txHash}`)
+      setRecoverStatus({ type: 'success', msg: `USDC received on ${destChain.name}!\nTX: ${txHash}` })
+      fetchWalletBalance(account, destKey)
+    } catch (e) {
+      const text = e?.shortMessage || e?.message || 'Recovery failed.'
+      setRecoverStatus({ type: 'error', msg: /expired/i.test(text) ? 'Circle’s approval for this transfer has expired. Contact Circle support with your Burn TX.' : text })
     }
     setLoading(false)
   }
@@ -315,8 +438,7 @@ export default function App() {
     if (!account || !spendAmount) return
     setLoading(true); setUnifiedStatus({ type: 'info', msg: 'Depositing...' })
     try {
-      const dc = getChainConfig(NET_KEY[spendChain])
-      await switchNetwork(dc)
+      await switchNetwork(getChainConfig(NET_KEY[spendChain]))
       const adapter = await makeAdapter()
       const kit = new AppKit()
       const r = await kit.unifiedBalance.deposit({ from: { adapter, chain: spendChain }, amount: spendAmount, token: 'USDC' })
@@ -394,21 +516,36 @@ return (
               <select style={styles.select} value={toChain} onChange={e => setToChain(e.target.value)}>
                 {chainOptions}
               </select>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                <div style={styles.label}>Amount (USDC)</div>
-                <button onClick={() => setAmount("100")} style={{ fontSize: "11px", color: "#c49e47", background: "none", border: "none", cursor: "pointer" }}>MAX</button>
-              </div>
+              <div style={styles.label}>Amount (USDC)</div>
               <input style={styles.input} type="number" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
               <div style={styles.divider} />
               <div style={styles.infoRow}><span>Token</span><span style={styles.infoVal}>USDC</span></div>
               <div style={styles.infoRow}><span>Protocol</span><span style={styles.infoVal}>CCTP</span></div>
-              <div style={styles.infoRow}><span>Min amount</span><span style={styles.infoVal}>1 USDC</span></div>
-              <div style={styles.infoRow}><span>Bridge fee</span><span style={styles.infoVal}>~0.001 USDC</span></div>
-              <div style={styles.infoRow}><span>Estimated time</span><span style={styles.infoVal}>~20-30 seconds</span></div>
+              <div style={styles.infoRow}><span>Gas needed</span><span style={styles.infoVal}>On both chains</span></div>
+              <div style={styles.infoRow}><span>Estimated time</span><span style={styles.infoVal}>A few seconds to ~20 min</span></div>
               <button style={styles.btn(!account || !amount || loading)} onClick={handleBridge} disabled={!account || !amount || loading}>
-                {loading ? 'Bridging...' : account ? 'Bridge ' + fromChain.replace('_', ' ') + ' → ' + toChain.replace('_', ' ') : 'Connect wallet first'}
+                {loading ? 'Working...' : account ? 'Bridge ' + fromChain.replace('_', ' ') + ' → ' + toChain.replace('_', ' ') : 'Connect wallet first'}
               </button>
               {bridgeStatus && <div style={styles.statusBox(bridgeStatus.type)}>{bridgeStatus.msg}</div>}
+              {failedBridge && (
+                <button style={{ ...styles.faucetBtn, opacity: loading ? 0.5 : 1 }} disabled={loading} onClick={handleRetryBridge}>
+                  Retry
+                </button>
+              )}
+
+              <div style={styles.divider} />
+              <div style={styles.cardTitle}>Finish a stuck transfer</div>
+              <div style={styles.cardSub}>USDC left the source chain but never arrived? Paste the burn transaction hash from the source chain to complete it.</div>
+              <div style={styles.label}>Source chain</div>
+              <select style={styles.select} value={recoverChain} onChange={e => setRecoverChain(e.target.value)}>
+                {chainOptions}
+              </select>
+              <div style={styles.label}>Burn TX hash</div>
+              <input style={styles.input} placeholder="0x..." value={recoverHash} onChange={e => setRecoverHash(e.target.value)} />
+              <button style={styles.btn(!account || !recoverHash.trim() || loading)} disabled={!account || !recoverHash.trim() || loading} onClick={handleRecover}>
+                {loading ? 'Working...' : account ? 'Complete transfer' : 'Connect wallet first'}
+              </button>
+              {recoverStatus && <div style={styles.statusBox(recoverStatus.type)}>{recoverStatus.msg}</div>}
             </>
           )}
           {tab === 'unified' && (
