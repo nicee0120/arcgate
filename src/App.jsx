@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { createWalletClient, createPublicClient, custom, http, fallback, formatEther } from 'viem'
+import { createWalletClient, createPublicClient, custom, http, fallback, formatEther, toHex } from 'viem'
 import { AppKit } from '@circle-fin/app-kit'
 import { createViemAdapterFromProvider } from '@circle-fin/adapter-viem-v2'
 
@@ -68,8 +68,53 @@ function getPublicClientForChain({ chain }) {
   return publicClientCache[viemChain.id]
 }
 
+// Cüzdana giden işlemlerde gas ücretini taban ücretin üzerine çıkarır.
+// Ayrıca toplu (batch) gönderimi kapatır, çünkü batch'te ücreti cüzdan belirliyor ve
+// Arbitrum Sepolia'da tam sınırda kalıp "max fee per gas less than block base fee" hatası veriyor.
+function makeSafeFeeProvider(base) {
+  return {
+    request: async ({ method, params }) => {
+      if (method === 'wallet_getCapabilities') return {}
+      if (method === 'wallet_sendCalls') {
+        const err = new Error('Batched transactions are disabled by ArcGate.')
+        err.code = 4200
+        throw err
+      }
+      if (method === 'eth_sendTransaction' && params?.[0]) {
+        const tx = { ...params[0] }
+        try {
+          const chainIdHex = await base.request({ method: 'eth_chainId' })
+          const chain = ALL_CHAINS.find(c => c.id === parseInt(chainIdHex, 16))
+          if (chain) {
+            const pub = getPublicClientForChain({ chain })
+            const block = await pub.getBlock()
+            const baseFee = block.baseFeePerGas
+            if (baseFee != null) {
+              const prio = tx.maxPriorityFeePerGas != null
+                ? BigInt(tx.maxPriorityFeePerGas)
+                : await pub.estimateMaxPriorityFeePerGas().catch(() => 0n)
+              const floor = baseFee * 3n + prio
+              if (tx.gasPrice != null) {
+                if (BigInt(tx.gasPrice) < floor) tx.gasPrice = toHex(floor)
+              } else {
+                const current = tx.maxFeePerGas != null ? BigInt(tx.maxFeePerGas) : 0n
+                if (current < floor) tx.maxFeePerGas = toHex(floor)
+                tx.maxPriorityFeePerGas = toHex(prio)
+              }
+            }
+          }
+        } catch { /* ücret ayarlanamazsa işlemi olduğu gibi gönder */ }
+        return base.request({ method, params: [tx, ...params.slice(1)] })
+      }
+      return base.request({ method, params })
+    },
+    on: (...args) => base.on?.(...args),
+    removeListener: (...args) => base.removeListener?.(...args),
+  }
+}
+
 function makeAdapter() {
-  return createViemAdapterFromProvider({ provider: window.ethereum, getPublicClient: getPublicClientForChain })
+  return createViemAdapterFromProvider({ provider: makeSafeFeeProvider(window.ethereum), getPublicClient: getPublicClientForChain })
 }
 
 // CCTP V2 (testnet) — takılan transferleri elle tamamlamak için
