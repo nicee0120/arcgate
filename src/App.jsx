@@ -43,7 +43,15 @@ const ARBITRUM_SEPOLIA = {
   blockExplorers: { default: { name: 'Arbiscan', url: 'https://sepolia.arbiscan.io' } },
 }
 
-const ALL_CHAINS = [ARC_TESTNET, SEPOLIA, BASE_SEPOLIA, AVALANCHE_FUJI, ARBITRUM_SEPOLIA]
+const HYPEREVM_TESTNET = {
+  id: 998,
+  name: 'HyperEVM Testnet',
+  nativeCurrency: { name: 'HYPE', symbol: 'HYPE', decimals: 18 },
+  rpcUrls: { default: { http: ['https://rpc.hyperliquid-testnet.xyz/evm'] } },
+  blockExplorers: { default: { name: 'HyperEVMScan', url: 'https://testnet.hyperevmscan.io' } },
+}
+
+const ALL_CHAINS = [ARC_TESTNET, SEPOLIA, BASE_SEPOLIA, AVALANCHE_FUJI, ARBITRUM_SEPOLIA, HYPEREVM_TESTNET]
 
 // Circle SDK'nın kendi varsayılan RPC'leri yerine bizim RPC'lerimizi kullanması için
 const publicClientCache = {}
@@ -65,7 +73,7 @@ function makeAdapter() {
 }
 
 // CCTP V2 (testnet) — takılan transferleri elle tamamlamak için
-const CCTP_DOMAINS = { sepolia: 0, avalanche: 1, arbitrum: 3, base: 6, arc: 26 }
+const CCTP_DOMAINS = { sepolia: 0, avalanche: 1, arbitrum: 3, base: 6, hyperevm: 19, arc: 26 }
 const MESSAGE_TRANSMITTER_V2 = '0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275'
 const IRIS_SANDBOX = 'https://iris-api-sandbox.circle.com'
 const MESSAGE_TRANSMITTER_ABI = [
@@ -86,6 +94,9 @@ const TOKENS = {
   arbitrum: [
     { symbol: 'USDC', address: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d', decimals: 6 },
   ],
+  hyperevm: [
+    { symbol: 'USDC', address: '0x2B3370eE501B4a559b57D449569354196457D8Ab', decimals: 6 },
+  ],
   sepolia: [
     { symbol: 'USDC', address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', decimals: 6 },
     { symbol: 'EURC', address: '0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4', decimals: 6 },
@@ -98,6 +109,7 @@ const NET_KEY = {
   Base_Sepolia: 'base',
   Avalanche_Fuji: 'avalanche',
   Arbitrum_Sepolia: 'arbitrum',
+  HyperEVM_Testnet: 'hyperevm',
 }
 
 const ERC20_ABI = [
@@ -107,7 +119,7 @@ const ERC20_ABI = [
   { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
 ]
 
-const getChainConfig = (net) => net === 'arbitrum' ? ARBITRUM_SEPOLIA : net === 'arc' ? ARC_TESTNET : net === 'base' ? BASE_SEPOLIA : net === 'avalanche' ? AVALANCHE_FUJI : SEPOLIA
+const getChainConfig = (net) => net === 'hyperevm' ? HYPEREVM_TESTNET : net === 'arbitrum' ? ARBITRUM_SEPOLIA : net === 'arc' ? ARC_TESTNET : net === 'base' ? BASE_SEPOLIA : net === 'avalanche' ? AVALANCHE_FUJI : SEPOLIA
 const getExplorerUrl = (net) => getChainConfig(net).blockExplorers.default.url
 
 const styles = {
@@ -151,6 +163,7 @@ const CHAIN_OPTIONS = [
   ['Base_Sepolia', 'Base Sepolia'],
   ['Avalanche_Fuji', 'Avalanche Fuji'],
   ['Arbitrum_Sepolia', 'Arbitrum Sepolia'],
+  ['HyperEVM_Testnet', 'HyperEVM Testnet'],
 ]
 
 const stepTxHash = (s) => s?.txHash || s?.data?.txHash || s?.transactionHash || ''
@@ -393,7 +406,7 @@ export default function App() {
 
       const isContract = code && code !== '0x' && code.length > 2
       const isArc = lookupNetwork === 'arc'
-      const nativeLabel = isArc ? 'USDC (native)' : lookupNetwork === 'avalanche' ? 'AVAX' : 'ETH'
+      const nativeLabel = isArc ? 'USDC (native)' : lookupNetwork === 'avalanche' ? 'AVAX' : lookupNetwork === 'hyperevm' ? 'HYPE' : 'ETH'
       const nativeFormatted = parseFloat(formatEther(nativeBalance)).toFixed(4)
       const tokenResults = tokens.map((t, i) => ({ symbol: t.symbol, balance: (Number(tokenBalances[i]) / 10 ** t.decimals).toFixed(4) }))
 
@@ -629,6 +642,7 @@ return (
                 <option value="base">Base Sepolia</option>
                 <option value="avalanche">Avalanche Fuji</option>
                 <option value="arbitrum">Arbitrum Sepolia</option>
+                <option value="hyperevm">HyperEVM Testnet</option>
               </select>
               <div style={styles.label}>Address</div>
               <input style={styles.input} placeholder="e.g. 0xACD46e5c...FD757107" value={lookupAddress} onChange={e => setLookupAddress(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLookup()} />
