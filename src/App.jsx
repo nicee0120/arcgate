@@ -167,6 +167,8 @@ const CHAIN_OPTIONS = [
 ]
 
 const stepTxHash = (s) => s?.txHash || s?.data?.txHash || s?.transactionHash || ''
+// Cüzdan approve+burn'ü tek pakette gönderirse SDK bu adımı 'batch' olarak raporluyor
+const findBurnStep = (steps = []) => steps.find(s => s.name === 'burn') || steps.find(s => s.name === 'batch')
 
 export default function App() {
   const [tab, setTab] = useState('bridge')
@@ -259,7 +261,7 @@ export default function App() {
   function describeBridgeResult(result) {
     const steps = result?.steps || []
     const failed = steps.find(s => s.state === 'error')
-    const burn = steps.find(s => s.name === 'burn')
+    const burn = findBurnStep(steps)
     const burnHash = stepTxHash(burn)
     let msg = `Bridge did not finish${failed ? ` (failed at: ${failed.name})` : ''}.`
     if (failed?.error) msg += `\n${failed.error?.message || failed.error}`
@@ -296,13 +298,24 @@ export default function App() {
 
   async function handleRetryBridge() {
     if (!failedBridge) return
+    // Gönderim (burn) hiç gerçekleşmediyse para cüzdanda: köprüyü baştan yap
+    const burn = findBurnStep(failedBridge.result?.steps)
+    if (burn?.state !== 'success') {
+      setFailedBridge(null)
+      return handleBridge()
+    }
     setLoading(true)
     setBridgeStatus({ type: 'info', msg: 'Retrying... confirm in your wallet.' })
     try {
       await switchNetwork(getChainConfig(NET_KEY[failedBridge.to]))
       const adapter = await makeAdapter()
       const kit = new AppKit()
-      const r = await kit.retry(failedBridge.result, { from: adapter, to: adapter })
+      const retryFn = (kit.retry || kit.retryBridge)?.bind(kit)
+      if (!retryFn) {
+        const h = stepTxHash(burn)
+        throw new Error(`Automatic retry is not available in this SDK version.${h ? `\nBurn TX: ${h}` : ''}`)
+      }
+      const r = await retryFn(failedBridge.result, { from: adapter, to: adapter })
       if (r?.state === 'success') {
         const mintHash = stepTxHash(r.steps?.find(s => s.name === 'mint'))
         setFailedBridge(null)
